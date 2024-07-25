@@ -1,0 +1,34 @@
+<html lang='en'>
+  <head>
+    <meta charset='UTF-8' />
+    <meta http-equiv='X-UA-Compatible' content='IE=edge' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+    <title>Document</title>
+    <style>
+
+      .mailtext{ font-size: 18px; color: #4E4E4E; margin-bottom: 0 !important; } .actionBtn{
+      background: #00811F; color: white !important; border: none; padding: 0; font: inherit; cursor:
+      pointer; outline: inherit; font-size: 1.125rem; width: 180px; height: 40px; margin-top: 34px;
+      border-radius: 5px; cursor: pointer; display: block; text-align: center; padding-top:
+      14px;text-decoration: none !important;transition: all 0.5s;} .actionBtn:hover{
+      background-color: #34c759; }
+
+    </style>
+  </head>
+
+  <body>
+    <div class='mailcontainer'>
+      <p class='mailtext'>Thanks for registering for
+        <br />
+        {{platformname}}
+        <br />
+        <br />
+        Click the button below to confirm your
+        <br />
+        registration</p>
+
+      <a href={{url}} class='actionBtn'>Confirm</a>
+    </div>
+
+  </body>
+</html>
