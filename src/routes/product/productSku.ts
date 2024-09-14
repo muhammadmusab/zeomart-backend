@@ -1,5 +1,5 @@
 import express from "express";
-import basicAuthMiddleware from "../../middlewares/basic-auth-middleware";
+
 import {
   Create,
   Update,
@@ -15,13 +15,15 @@ import {
   updateProductSkuSchema,
   listProductSkuSchema,
 } from "../../schemas/product/productSku";
+import authMiddleware from "../../middlewares/auth-middleware";
+import { UserType } from "../../types/model-types";
 
 const router = express.Router();
 
 router.post(
   "/create",
   validate(createProductSkuSchema),
-  basicAuthMiddleware,
+  authMiddleware(UserType.VENDOR),
   Create
 );
 
@@ -30,17 +32,17 @@ router.get(
   validate(getProductSkuSchema),
   Get
 );
-router.put(
+router.patch(
   "/update/:uid",
   validate(updateProductSkuSchema),
-  basicAuthMiddleware,
+  authMiddleware(UserType.VENDOR),
   Update
 );
 
 router.delete(
   "/delete/:uid",
   validate(deleteProductSkuSchema),
-  basicAuthMiddleware,
+  authMiddleware(UserType.VENDOR),
   Delete
 );
 

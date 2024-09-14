@@ -7,6 +7,9 @@ import {
   InferCreationAttributes,
   UUIDV4,
 } from "sequelize";
+import { Media } from "./Media";
+import { ProductSkus } from "./ProductSku";
+import { ProductVariantType } from "./ProductVariantType";
 interface ProductModel
   extends Model<
     InferAttributes<ProductModel>,
@@ -16,17 +19,18 @@ interface ProductModel
   uuid: CreationOptional<string>;
   title: string;
   slug: string;
-  brand: string;
-  multipart: boolean;
-  highlights: string[];
+  hasVariants: boolean;
+  highlights?: string;
   overview: string;
-  basePrice: CreationOptional<number | null>;
+  currentPrice: CreationOptional<number | null>;
   oldPrice: CreationOptional<number | null>;
-  baseQuantity: CreationOptional<number | null>;
+  quantity: CreationOptional<number | null>;
   status?: CreationOptional<string>;
   CategoryId?: number | null;
-  sku: CreationOptional<string>;
-  specifications:Record<string,any>[]
+  VendorId?: number | null;
+  sku?: CreationOptional<string>;
+  features: Record<string, any>[];
+  BrandId?: number;
 }
 export const Product = sequelize.define<ProductModel>(
   "Product",
@@ -39,10 +43,6 @@ export const Product = sequelize.define<ProductModel>(
     title: {
       type: DataTypes.TEXT,
     },
-    brand: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
     status: {
       type: DataTypes.STRING,
       // allowNull: false,
@@ -52,19 +52,18 @@ export const Product = sequelize.define<ProductModel>(
       allowNull: false,
       unique: true,
     },
-
     overview: {
       type: DataTypes.TEXT,
       allowNull: false,
     },
     highlights: {
-      type: DataTypes.ARRAY(DataTypes.STRING),
+      type: DataTypes.STRING,
     },
     sku: {
-      type: DataTypes.STRING, // can be null if product has a variant
+      type: DataTypes.STRING, // can be null (optional)
       unique: true,
     },
-    basePrice: {
+    currentPrice: {
       //can be null if product has a variant
       type: DataTypes.DECIMAL(12, 2),
     },
@@ -72,24 +71,24 @@ export const Product = sequelize.define<ProductModel>(
       //can be null if product has a variant
       type: DataTypes.DECIMAL(12, 2),
     },
-    baseQuantity: {
+    quantity: {
       //can be null if product has a variant
       type: DataTypes.INTEGER,
     },
-    specifications:{
-      type:DataTypes.JSONB(),
-      allowNull:false
+    features: {
+      type: DataTypes.JSONB(),
     },
-    multipart: {
+    hasVariants: {
       type: DataTypes.BOOLEAN,
-      defaultValue:false,
-      set(this) {
-        const multipart = this.getDataValue("multipart");
-
-        if (multipart) {
-          this.setDataValue("basePrice", null);
-          this.setDataValue("baseQuantity", null);
+      defaultValue: false,
+      set(value) {
+        if (value == "true") {
+          this.setDataValue("hasVariants", true);
+          this.setDataValue("currentPrice", null);
+          this.setDataValue("quantity", null);
           this.setDataValue("oldPrice", null);
+        } else {
+          this.setDataValue("hasVariants", false);
         }
       },
     },
@@ -100,10 +99,24 @@ export const Product = sequelize.define<ProductModel>(
         key: "id",
       },
     },
+    VendorId: {
+      type: DataTypes.INTEGER,
+      references: {
+        model: "Vendors",
+        key: "id",
+      },
+    },
+    BrandId: {
+      type: DataTypes.INTEGER,
+      references: {
+        model: "Brands",
+        key: "id",
+      },
+    },
   },
   {
     defaultScope: {
-      attributes: { exclude: ["id", "CategoryId"] },
+      attributes: { exclude: ["id", "CategoryId", "VendorId", "BrandId"] },
     },
     scopes: {
       withId: {
@@ -114,3 +127,35 @@ export const Product = sequelize.define<ProductModel>(
     },
   }
 );
+
+Product.beforeBulkDestroy((options: any) => {
+  options.individualHooks = true;
+  return options;
+});
+async function deleteDependecies(product: any, options: any) {
+  const instance = await Product.scope("withId").findOne({
+    where: {
+      uuid: product.uuid,
+    },
+  });
+  if (instance) {
+    await Media.destroy({
+      where: {
+        mediaableId: instance?.id,
+        mediaableType: "Product",
+      },
+    });
+    await ProductSkus.destroy({
+      where: {
+        ProductId: instance?.id,
+      },
+    });
+
+    await ProductVariantType.destroy({
+      where: {
+        ProductId: instance?.id,
+      },
+    });
+  }
+}
+Product.beforeDestroy(deleteDependecies);

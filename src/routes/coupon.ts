@@ -22,7 +22,7 @@ router.post(
 
 router.post("/apply", validate(applyCouponSchema),authMiddleware(), Apply);
 
-router.put(
+router.patch(
   "/update/:uid",
   validate(updateCouponSchema),
   basicAuthMiddleware,

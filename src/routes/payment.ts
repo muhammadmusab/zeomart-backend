@@ -21,7 +21,7 @@ router.post(
   Create
 );
 
-router.put(
+router.patch(
   "/update/:uid",
   validate(updatePaymentSchema),
   basicAuthMiddleware,

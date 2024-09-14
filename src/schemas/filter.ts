@@ -1,10 +1,10 @@
-import * as yup from 'yup'
+import * as yup from "yup";
 
 export const createFilterSchema = yup.object({
   body: yup.object({
     title: yup.string().required(),
     type: yup.string().required(),
-    tiadditionalTitletle: yup.string(),
+    additionalTitle: yup.string(),
     options: yup
       .array()
       .of(
@@ -21,14 +21,14 @@ export const createFilterSchema = yup.object({
         },
       }),
 
-    categoryUniqueId: yup.string().uuid().required(),
+    categories: yup.array(yup.string().uuid().required()).required(),
   }),
 });
 export const updateFilterSchema = yup.object({
   body: yup.object({
     title: yup.string(),
     type: yup.string(),
-    tiadditionalTitletle: yup.string(),
+    additionalTitle: yup.string(),
     options: yup
       .array()
       .of(
@@ -44,7 +44,7 @@ export const updateFilterSchema = yup.object({
         },
       }),
 
-    categoryUniqueId: yup.string().uuid(),
+    categories: yup.array(yup.string().uuid().required()).required(),
   }),
   params: yup.object({
     uid: yup.string().uuid().required(),
@@ -56,9 +56,14 @@ export const deleteFilterSchema = yup.object({
     uid: yup.string().uuid().required(),
   }),
 });
+export const getFilterSchema = yup.object({
+  params: yup.object({
+    uid: yup.string().uuid().required(),
+  }),
+});
 
 export const listFilterSchema = yup.object({
   query: yup.object({
-    categoryUniqueId: yup.string().uuid().required(),
+    filter: yup.string().uuid().required(),
   }),
 });

@@ -8,7 +8,6 @@ import {
   CreationOptional,
   InferAttributes,
   InferCreationAttributes,
-  NonAttribute,
   UUIDV4,
 } from "sequelize";
 import path from "path";
@@ -38,24 +37,26 @@ interface AuthModel
   email: string;
   password?: CreationOptional<string>;
   uuid: CreationOptional<string>;
-  type: UserType;
+  type: UserType; // vendor or user
   verified: CreationOptional<boolean>;
   UserId?: CreationOptional<number | null>;
-  authType?: CreationOptional<AuthType>;
+  VendorId?: CreationOptional<number | null>;
+  authType?: CreationOptional<AuthType>; // custom, google, facebook
   status?: CreationOptional<AuthStatus>;
+  avatar?: string|null;
 }
 
 interface IAuthFunctions extends AuthModel {
   generateMailToken: () => Promise<string>;
+
   generateJWT: (expiresIn?: string, tokenType?: string) => string;
+
   User?: {
     id?: number;
     uuid?: string;
-    name: string;
-    email: string;
-    mobile?: string;
-    gender?: string;
-    dob?: string;
+    firstName: string;
+    lastName: string;
+    phone?: string;
   };
 }
 export const Auth = sequelize.define<AuthModel & IAuthFunctions>(
@@ -73,6 +74,9 @@ export const Auth = sequelize.define<AuthModel & IAuthFunctions>(
       validate: {
         isEmail: true,
       },
+    },
+    avatar: {
+      type: DataTypes.STRING,
     },
     password: {
       type: DataTypes.STRING,
@@ -97,6 +101,13 @@ export const Auth = sequelize.define<AuthModel & IAuthFunctions>(
         key: "id",
       },
     },
+    VendorId: {
+      type: DataTypes.INTEGER,
+      references: {
+        model: "Vendors",
+        key: "id",
+      },
+    },
     authType: {
       type: DataTypes.STRING,
       defaultValue: "custom",
@@ -108,7 +119,9 @@ export const Auth = sequelize.define<AuthModel & IAuthFunctions>(
   },
   {
     defaultScope: {
-      attributes: { exclude: ["password", "verified", "UserId", "id"] },
+      attributes: {
+        exclude: ["password", "verified", "UserId", "VendorId", "id"],
+      },
     },
     scopes: {
       withPassword: {
@@ -203,7 +216,7 @@ Auth.prototype.generateMailToken = async function () {
 
 // ===== Generate Auth Token
 Auth.prototype.generateJWT = function (
-  expiresIn = "15m",
+  expiresIn = process.env.JWT_ACCESS_EXPIRY,
   tokenType = "access"
 ) {
   const user = this;
@@ -212,7 +225,6 @@ Auth.prototype.generateJWT = function (
   if (tokenType === "refresh") privateKey = jwtRefreshPrivateKey;
 
   const payload = { id: user.id, type: user.type, email: user.email };
-  console.log(tokenType);
 
   const options = {
     // @ts-ignore
@@ -221,8 +233,8 @@ Auth.prototype.generateJWT = function (
     expiresIn,
     algorithm: process.env.JWT_HASH_ALGORITHM as any,
   };
+  console.log(options)
   let token = jwt.sign(payload, privateKey, options);
-  console.log("token", token);
 
   return token;
 };

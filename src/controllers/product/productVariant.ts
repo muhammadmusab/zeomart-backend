@@ -12,6 +12,7 @@ import { ProductImage } from "../../models/ProductImage";
 import { Op, QueryTypes, Sequelize } from "sequelize";
 import { ProductTypes } from "../../models/ProductType";
 import { sequelize } from "../../config/db";
+import { Option } from "../../models/Options";
 
 export const Create = async (
   req: Request,
@@ -19,40 +20,40 @@ export const Create = async (
   next: NextFunction
 ) => {
   try {
-    let { productVariantTypeUniqueId, value } = req.body;
+    let { productVariantType, values } = req.body;
 
-    const productVariantType = await ProductVariantType.scope("withId").findOne(
-      {
-        where: {
-          uuid: productVariantTypeUniqueId,
-        },
-      }
-    );
-    if (!productVariantType) {
+    const _productVariantType = await ProductVariantType.scope(
+      "withId"
+    ).findOne({
+      where: {
+        uuid: productVariantType,
+      },
+    });
+
+    if (!_productVariantType) {
       return res.status(403).send({ message: "Variant Type not found" });
     }
 
-    //3. Create Variant Value
-    const productVariantValue = await ProductVariantValues.create({
-      value,
-      ProductVariantTypeId: productVariantType.id,
+    values = values.map((value: string | number) => {
+      return {
+        value,
+        ProductVariantTypeId: _productVariantType.id,
+      };
     });
 
-    delete productVariantType.dataValues.id;
-    delete productVariantType.dataValues.ProductTypeId;
-    delete productVariantValue.dataValues.id;
-    delete productVariantValue.dataValues.ProductVariantTypeId;
+    //3. Create Variant Value
+    const result = await ProductVariantValues.bulkCreate(values);
 
     res.send({
       message: "Success",
       data: {
-        productVariantType,
-        productVariantValue,
+        productVariantType: _productVariantType,
+        ProductVariantValues: result,
       },
     });
   } catch (error: any) {
     console.log(error.message);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const AssignVariants = async (
@@ -61,67 +62,79 @@ export const AssignVariants = async (
   next: NextFunction
 ) => {
   try {
-    let { productVariantValueUniqueIds, productSkuUniqueId, productUniqueId } =
-      req.body;
+    let { productVariantValue, productSku, product, media } = req.body;
 
     const productVariantValues = await ProductVariantValues.findAll({
       where: {
-        uuid: productVariantValueUniqueIds,
+        uuid: productVariantValue,
       },
       attributes: ["id"],
     });
-    console.log(productVariantValues);
+
     if (!productVariantValues.length) {
       return res.status(403).send({ message: "Variant Values not found" });
     }
-    const productSku = await ProductSkus.scope("withId").findOne({
+    const _productSku = await ProductSkus.scope("withId").findOne({
       where: {
-        uuid: productSkuUniqueId,
+        uuid: productSku,
       },
     });
-    if (!productSku) {
+    if (!_productSku) {
       return res.status(403).send({ message: "Product Sku not found" });
     }
-    const product = await Product.scope("withId").findOne({
+    const _product = await Product.scope("withId").findOne({
       where: {
-        uuid: productUniqueId,
+        uuid: product,
       },
     });
-    if (!product) {
+    if (!_product) {
       return res.status(403).send({ message: "Product not found" });
+    }
+
+    // Add product media/images to database
+    if (_product.id && _productSku.id) {
+      const formattedMedia = media.map((item: any) => {
+        return {
+          url: item.url,
+          ProductId: _product.id,
+          ProductSkuId: _productSku.id,
+        };
+      });
+
+      await ProductImage.bulkCreate(formattedMedia);
     }
 
     const productVariantValueIds = productVariantValues.map(
       (item) => item.dataValues.id
     ) as number[];
 
-    console.log("ids", productVariantValueIds);
-
     const total = await SkuVariations.count({
       where: {
-        ProductSkuId: productSku.id,
+        ProductSkuId: _productSku.id,
       },
     });
     if (total && total >= productVariantValueIds.length) {
       return res.status(403).send({ message: "Variant already added" });
     }
 
-    productVariantValueIds.map(async (value: any) => {
-      const skuVariantion = await SkuVariations.create({
-        ProductVariantValueId: value,
-        ProductSkuId: productSku.id,
-        ProductId: product.id,
-        combinationIds: productVariantValueIds,
-      });
-      delete skuVariantion.dataValues.id;
-      delete skuVariantion.dataValues.ProductId;
-      delete skuVariantion.dataValues.ProductVariantValueId;
-      delete skuVariantion.dataValues.ProductSkuId;
-    });
+    await Promise.all(
+      productVariantValueIds.map(async (value: any) => {
+        const skuVariantion = await SkuVariations.create({
+          ProductVariantValueId: value,
+          ProductSkuId: _productSku.id,
+          ProductId: _product.id,
+          combinationIds: productVariantValueIds,
+        });
+        delete skuVariantion.dataValues.id;
+        delete skuVariantion.dataValues.ProductId;
+        delete skuVariantion.dataValues.ProductVariantValueId;
+        delete skuVariantion.dataValues.ProductSkuId;
+      })
+    );
 
     const skuVariations = await SkuVariations.findAll({
       where: {
-        ProductSkuId: productSku.id,
+        ProductSkuId: _productSku.id,
       },
     });
 
@@ -130,8 +143,7 @@ export const AssignVariants = async (
       data: skuVariations,
     });
   } catch (error: any) {
-    console.log(error.message);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -177,7 +189,7 @@ export const setDefaultVariant = async (
     }
     res.send({ message: "Success", data: variants });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Update = async (
@@ -209,12 +221,12 @@ export const Update = async (
     }
     res.send({ message: "Success", data: productVariantValue });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Get = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { uid } = req.params;//uuid of the product
+    const { uid } = req.params; //uuid of the product
     let product = await Product.scope("withId").findOne({
       where: {
         uuid: uid,
@@ -222,10 +234,11 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
     });
 
     const query = `
-              SELECT pt."type" as "type",  array_agg(json_build_object('productVariantValueUniqueId',pvv.uuid,'value',pvv."value")) as "ProductVariants"
+              SELECT pt."type" as "type",  array_agg(json_build_object('productVariantValueUniqueId',pvv.uuid,'value',o."value")) as "ProductVariants"
               FROM "ProductVariantTypes" as pvt
                   JOIN "ProductVariantValues" as pvv ON pvv."ProductVariantTypeId" = pvt."id"
                   JOIN "ProductTypes" as pt ON pvt."ProductTypeId" = pt."id"
+                  JOIN "Options" as o ON ppv."OptionId" = o."id"
               WHERE pvt."ProductId"=${product?.id}
               GROUP BY pvt."ProductTypeId",pt."type";
               `;
@@ -236,7 +249,7 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
 
     res.send({ message: "Success", data: productVariants });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -261,7 +274,7 @@ export const Delete = async (
       res.status(err.status).send({ message: err.message });
     }
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -273,20 +286,20 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
 
     const { uid } = req.params; // uid
 
-    const productVariantType = await ProductVariantType.scope("withId").findOne(
-      {
-        where: {
-          uuid: uid as string,
-        },
-      }
-    );
-    if (!productVariantType?.id) {
+    const _productVariantType = await ProductVariantType.scope(
+      "withId"
+    ).findOne({
+      where: {
+        uuid: uid as string,
+      },
+    });
+    if (!_productVariantType?.id) {
       res.status(403).send({ message: "Variant type not found" });
     }
 
     const productVariantvalues = await ProductVariantValues.findAll({
       where: {
-        ProductVariantTypeId: productVariantType?.id,
+        ProductVariantTypeId: _productVariantType?.id,
       },
       order: [[sortBy as string, sortAs]],
     });
@@ -294,7 +307,7 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     res.send({ message: "Success", data: productVariantvalues });
   } catch (error: any) {
     console.log(error.message);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -307,21 +320,20 @@ export const AssignedList = async (
     // sortBy
     const sortBy = req.query.sortBy ? req.query.sortBy : "createdAt";
     const sortAs = req.query.sortAs ? (req.query.sortAs as string) : "DESC";
+    //@ts-expect-error
+    const { product, productSku, skuVariant ,separate="false"} = req.filter;
 
-    const { productUniqueId, productSkuUniqueId, skuVariantUniqueId } =
-      req.body; // uid
-
-    const product = await Product.scope("withId").findOne({
+    const _product = await Product.scope("withId").findOne({
       where: {
-        uuid: productUniqueId as string,
+        uuid: product as string,
       },
       attributes: ["uuid", "id"],
     });
-    let productSkuId = null;
-    if (productSkuUniqueId) {
-      productSkuId = await ProductSkus.findOne({
+    let _productSku = null;
+    if (productSku) {
+      _productSku = await ProductSkus.findOne({
         where: {
-          uuid: productSkuUniqueId,
+          uuid: productSku,
         },
         attributes: ["id"],
       });
@@ -330,20 +342,21 @@ export const AssignedList = async (
     let where: {
       ProductId: any;
       ProductSkuId?: any;
-      skuVariantUniqueId?: any;
+      // skuVariantUniqueId?: any;
+      uuid?: any;
     } = {
       ProductId: product?.id,
     };
-    if (productSkuId) {
-      where.ProductSkuId = productSkuId.id;
+    if (_productSku) {
+      where.ProductSkuId = _productSku.id;
     }
-    if (skuVariantUniqueId) {
-      where.skuVariantUniqueId = skuVariantUniqueId;
+    if (skuVariant) {
+      where.uuid = skuVariant;
     }
 
     let data = null;
 
-    if (req.query.separate === "true") {
+    if (separate === "true") {
       data = await SkuVariations.findAll({
         where,
         include: [
@@ -356,6 +369,9 @@ export const AssignedList = async (
           {
             model: ProductVariantValues,
             include: [
+              {
+                model: Option,
+              },
               {
                 model: ProductVariantType,
                 include: [
@@ -372,15 +388,16 @@ export const AssignedList = async (
         ],
       });
     } else {
-      let where = `sv."ProductId" = ${product?.id}`;
-      if (productSkuId?.id) {
-        where = `sv."ProductId" = ${product?.id} AND sv."ProductSkuId" = ${productSkuId?.id}`;
+      let where = `sv."ProductId" = ${_product?.id}`;
+      if (_productSku?.id) {
+        where = `sv."ProductId" = ${_product?.id} AND sv."ProductSkuId" = ${_productSku?.id}`;
       }
       const query = `
-                SELECT ps.sku,ps."oldPrice",ps."currentPrice",ps.quantity,array_agg(json_build_object('productVariantValueUniqueId',pvv.uuid,'skuUniqueId',ps.uuid,'value',pvv."value",'elementType',pvt."elementType",'type',pt."type",'skuVariantUniqueId',sv.uuid,'skuUniqueId',ps.uuid)) as "variantValues"
+                SELECT ps.sku,ps."oldPrice",ps."currentPrice",ps.quantity,array_agg(json_build_object('productVariantValueUniqueId',pvv.uuid,'skuUniqueId',ps.uuid,'value',o."value",'elementType',pvt."elementType",'type',pt."type",'skuVariantUniqueId',sv.uuid,'skuUniqueId',ps.uuid)) as "variantValues"
                 FROM "SkuVariations" as sv
                     JOIN "ProductSkus" as ps ON sv."ProductSkuId" = ps."id"
                     JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
+                    JOIN "Options" as o ON pvv."OptionId" = o."id"
                     JOIN "ProductVariantTypes" as pvt ON pvv."ProductVariantTypeId" = pvt."id"
                     JOIN "ProductTypes" as pt ON pvt."ProductTypeId" = pt."id"
                 WHERE ${where}

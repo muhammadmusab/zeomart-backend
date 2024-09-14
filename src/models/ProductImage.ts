@@ -14,9 +14,9 @@ interface ProductImageModel
   > {
   id?: CreationOptional<number>;
   uuid: CreationOptional<string>;
-  url: string|null;
+  url: string | null;
   alt?: CreationOptional<string>;
-  ProductVariantValueId?: CreationOptional<number | null>;
+  ProductSkuId?: CreationOptional<number | null>;
   ProductId?: number;
 }
 export const ProductImage = sequelize.define<ProductImageModel>(
@@ -34,10 +34,10 @@ export const ProductImage = sequelize.define<ProductImageModel>(
     alt: {
       type: DataTypes.STRING,
     },
-    ProductVariantValueId: {
+    ProductSkuId: {
       type: DataTypes.INTEGER,
       references: {
-        model: "ProductVariantValues",
+        model: "ProductSkus",
         key: "id",
       },
     },
@@ -47,13 +47,13 @@ export const ProductImage = sequelize.define<ProductImageModel>(
         model: "Products",
         key: "id",
       },
-      allowNull:false,
+      allowNull: false,
     },
   },
   {
     freezeTableName: true,
     defaultScope: {
-      attributes: { exclude: ["id", "ProductVariantValueId", "ProductId"] },
+      attributes: { exclude: ["id", "ProductSkuId", "ProductId"] },
     },
     scopes: {
       withId: {

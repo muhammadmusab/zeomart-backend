@@ -4,6 +4,9 @@ import { BadRequestError } from "../utils/api-errors";
 import { getValidUpdates } from "../utils/validate-updates";
 import { UserType } from "../types/model-types";
 import { getPaginated } from "../utils/paginate";
+import { Model, Op } from "sequelize";
+import { isValidUUID } from "../utils/is-valid-uuid";
+import { Media } from "../models/Media";
 
 export const Create = async (
   req: Request,
@@ -11,17 +14,23 @@ export const Create = async (
   next: NextFunction
 ) => {
   try {
-    const { parentUniqueId, title } = req.body;
+    const { parent, title, media } = req.body;
 
     let parentCategory = null;
     let body = {
       title,
+      slug: title
+        .replace(" ", "_")
+        .replace("-", "_")
+        .replace(",", "_")
+        .toLocaleLowerCase()
+        .trim(),
     } as any;
     // in case we want to add the category as sub-category of a already existing category(parent)
-    if (parentUniqueId) {
+    if (parent) {
       parentCategory = await Category.scope("withId").findOne({
         where: {
-          uuid: parentUniqueId,
+          uuid: parent,
         },
         attributes: {
           include: ["id"],
@@ -29,13 +38,41 @@ export const Create = async (
       });
       body.parentId = parentCategory?.id;
     }
+    let category = await Category.scope("withId").findOne({
+      where: {
+        title,
+      },
+    });
+    if (category) {
+      const err = new BadRequestError("Category already exists");
+      return next(err);
+    }
+    category = await Category.create(body);
+    let mediaObject;
 
-    const category = await Category.create(body);
+    if (media?.length) {
+      const tempMedia = media[0];
+
+      mediaObject = await Media.create({
+        url: tempMedia?.url,
+        width: tempMedia?.width,
+        height: tempMedia?.height,
+        size: tempMedia?.size,
+        mime: tempMedia?.mime,
+        name: tempMedia?.name,
+        mediaableType: "Category",
+        mediaableId: category?.id,
+      });
+    }
+
     const { data } = getData(category);
-    res.status(201).send({ message: "Success", data });
+    const { data: mediaData } = getData(mediaObject, "media");
+    res.status(201).send({
+      message: "Success",
+      data: { ...data, media: mediaData },
+    });
   } catch (error: any) {
-    console.log(error.message);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Update = async (
@@ -44,35 +81,123 @@ export const Update = async (
   next: NextFunction
 ) => {
   try {
-    const validUpdates = ["title"];
+    const validUpdates = ["title", "media"];
     const validBody = getValidUpdates(validUpdates, req.body);
     const { uid } = req.params;
+
     // if we want to change the parent of the current category
-    if (req.body.parentUniqueId) {
+    if (req.body.parent) {
       const parentCategory = await Category.scope("withId").findOne({
         where: {
-          uuid: req.body.parentUniqueId,
+          uuid: req.body.parent,
         },
-        include: ["id"],
+        attributes: ["id"],
       });
+
       validBody.parentId = parentCategory?.id;
     }
-    const result = await Category.update(
-      { ...validBody },
-      {
-        where: {
-          uuid: uid,
-        },
+
+    const category = await Category.scope("withId").findOne({
+      where: {
+        uuid: uid,
+      },
+    });
+    let mediaObject = await Media.scope("withId").findOne({
+      where: {
+        mediaableId: category?.id,
+      },
+    });
+    if (category) {
+      if (!validBody.media?.length) {
+        await mediaObject?.destroy();
+      } else {
+        let tempMedia = validBody.media[0];
+        if (!mediaObject) {
+          mediaObject = await Media.create({
+            url: tempMedia?.url,
+            width: tempMedia?.width,
+            height: tempMedia?.height,
+            size: tempMedia?.size,
+            mime: tempMedia?.mime,
+            name: tempMedia?.name,
+            mediaableType: "Category",
+            mediaableId: category?.id,
+          });
+        } else {
+          mediaObject.url = tempMedia.url;
+          mediaObject.width = tempMedia.width ?? null;
+          mediaObject.height = tempMedia.height ?? null;
+          mediaObject.size = tempMedia.size;
+          mediaObject.mime = tempMedia.mime;
+          mediaObject.name = tempMedia.name;
+          await mediaObject.save();
+        }
       }
-    );
-    if (!result[0]) {
-      const err = new BadRequestError("Could not update the category data");
-      res.status(err.status).send({ message: err.message });
-      return;
+      if (validBody.parentId) {
+        if (validBody.parentId === category.id) {
+          const err = new BadRequestError(
+            "Category can not be parent of itself"
+          );
+          return next(err);
+        }
+        category.parentId = validBody.parentId;
+      }
+      category.title = validBody.title;
+      category.slug = validBody.title
+        ? validBody.title
+            .replace(" ", "_")
+            .replace("-", "_")
+            .replace(",", "_")
+            .toLocaleLowerCase()
+            .trim()
+        : category.slug;
+      await category.save();
+      await category.reload();
+      delete category.dataValues.id;
+      delete category.dataValues.parentId;
     }
-    res.send({ message: "Success", data: result });
+
+    res.send({ message: "Success", data: category });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
+  }
+};
+export const Get = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { uid } = req.params;
+    const isValid = isValidUUID(uid);
+    const where: any = {};
+    if (isValid) {
+      where["uuid"] = uid;
+    } else {
+      where["slug"] = uid;
+    }
+    const category = await Category.findOne({
+      where,
+      include: [
+        {
+          model: Media,
+          as: "media",
+          attributes: { exclude: ["ProductId", "id", "CategoryId"] },
+        },
+        {
+          model: Category,
+          as: "parent",
+          attributes: { exclude: ["parentId", "id"] },
+          include: [
+            {
+              model: Media,
+              as: "media",
+              attributes: { exclude: ["ProductId", "id", "CategoryId"] },
+            },
+          ],
+        },
+      ],
+    });
+
+    res.send({ message: "Success", data: category });
+  } catch (error) {
+    next(error);
   }
 };
 export const Delete = async (
@@ -95,24 +220,31 @@ export const Delete = async (
       res.status(err.status).send({ message: err.message });
     }
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const List = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // const { limit, offset } = getPaginated(req.query);
+    // @ts-expect-error
+    const { title } = req?.search ?? {};
+    const { limit, offset } = getPaginated(req.query);
     // sortBy
     const sortBy = req.query.sortBy ? req.query.sortBy : "createdAt";
     const sortAs = req.query.sortAs ? (req.query.sortAs as string) : "DESC";
-    const showSubcategories =
+    const showChildren =
       req.query.showSubcategories?.toString().toLocaleLowerCase().trim() ===
       "true"
         ? true
         : false;
     // level of deep subcategories
     const levels = req.query.levels ? req.query.levels : 1;
-    const { include } = addIncludeLevels(levels as number, showSubcategories);
-    const where = {};
+    const { include } = addIncludeLevels(levels as number, showChildren);
+    const where: { uuid?: string; title?: any } = {};
+    if (title) {
+      where["title"] = {
+        [Op.iLike]: `%${title}%`,
+      };
+    }
     if (req.query.categoryUniqueId) {
       //@ts-ignore
       where["uuid"] = req.query.categoryUniqueId;
@@ -124,42 +256,53 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
         exclude: ["parentId", "id"],
       },
       include,
-      // offset: offset,
-      // limit: limit,
+      offset: offset,
+      limit: limit,
       order: [[sortBy as string, sortAs]],
     });
 
     res.send({ message: "Success", data: categories, total });
   } catch (error: any) {
-    console.log(error.message);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
-const getData = (instance: any) => {
+const getData = (instance: any, type: "category" | "media" = "category") => {
   delete instance.dataValues.id;
-  delete instance.dataValues.parentId;
+  if (type == "category") {
+    delete instance.dataValues.parentId;
+  }
   return { data: instance };
 };
 
-const addIncludeLevels = (levels: number, addInclude: boolean) => {
+const addIncludeLevels = (levels: number, showChildren: boolean) => {
   const includeArray: any = [];
-  if (addInclude) {
-    let currentArray = includeArray;
-    const model = Category;
+  // if (showChildren) {
+  let currentArray = includeArray;
+  const model = Category;
 
-    for (let i = 0; i < levels; i++) {
-      if (!currentArray.length || !currentArray[0].include) {
-        currentArray[0] = {
-          model,
-          as: "subCategories",
-          // required: false,
-          include: [],
-          attributes: { exclude: ["parentId", "id"] },
-        };
-      }
-      currentArray = currentArray[0].include;
+  for (let i = 0; i < levels; i++) {
+    if (!currentArray.length || !currentArray[0].include) {
+      currentArray[0] = {
+        model,
+        as: showChildren ? "subCategories" : "parent",
+        attributes: { exclude: ["parentId", "id"] },
+        include: [
+          {
+            model: Media,
+            as: "media",
+            attributes: { exclude: ["ProductId", "id", "CategoryId"] },
+          },
+        ],
+      };
+      currentArray[1] = {
+        model: Media,
+        as: "media",
+        attributes: { exclude: ["ProductId", "id", "CategoryId"] },
+      };
     }
+    currentArray = currentArray[0].include;
   }
+  // }
   return { include: includeArray };
 };

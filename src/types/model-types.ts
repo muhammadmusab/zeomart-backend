@@ -1,26 +1,36 @@
 export interface UserData {
   id?: number;
   uuid?:string;
-  name: string;
-  email: string;
-  mobile?: string;
-  gender?:string;
-  dob?:string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
 }
-export interface SellerData {
+export interface VendorData {
   id?: number;
-  storeName: string;
-  address: string;
-  email: string;
-  contact: string;
+  uuid?: string;
+  name: string;
+  description?: string;
+  phone?: string;
+  coverPhoto?: string;
 }
 
 export enum UserType {
   USER = 'user',
-  SELLER = 'seller',
+  VENDOR = 'vendor',
   ADMIN = 'admin',
 }
-
+export interface AuthData{
+  email: string;
+  password?: string;
+  uuid?: string;
+  type: UserType; // vendor or user
+  verified?: boolean;
+  UserId?: number | null;
+  VendorId?: number | null;
+  authType?: AuthType; // custom, google, facebook
+  status?: AuthStatus;
+  avatar?: string;
+}
 export enum AuthStatus {
   ACTIVATION_PENDING = 'activation_pending',
   USER_VERIFIED = 'user_verified',

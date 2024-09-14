@@ -2,8 +2,9 @@ import { Token } from "../models/Token";
 import { Auth } from "../models/Auth";
 import { MailToken } from "../models/MailToken";
 import { User } from "../models/User";
+import { Vendor } from "../models/Vendor";
 
-import { UserType, AuthType, AuthStatus } from "../types/model-types";
+import { UserType, AuthType, AuthStatus, AuthData } from "../types/model-types";
 
 import { Request, Response, NextFunction } from "express";
 import bcrypt from "bcrypt";
@@ -17,6 +18,9 @@ import path from "path";
 import fs from "fs";
 import jwt from "jsonwebtoken";
 import { OAuth2Client } from "google-auth-library";
+import { Address } from "../models/Address";
+import { UnprocessableError } from "../utils/api-errors/unprocessable-content";
+import { ServerError } from "../utils/api-errors/server-error";
 
 const jwtMailPublicKey = fs.readFileSync(
   path.join(__dirname, "../config", "jwt-mail-public.pem"),
@@ -34,53 +38,95 @@ export const register = async (
 ) => {
   try {
     let { email, password } = req.body;
-    // we get query from FE
-    const type = req.query.type ? (req.query.type as UserType) : UserType.USER;
-
-    let user;
-    let seller; //will add seller functionality later
-    let auth;
-
-    if (type === UserType.USER) {
-      const { name } = req.body;
-      user = await User.create({
-        name: name,
-      });
-    }
 
     // check if email exists:
     const existingEmail = await Auth.findOne({
       where: {
-        email: req.body.email,
+        email: email,
       },
     });
+
     if (existingEmail) {
       const err = new BadRequestError("email already exists");
       return next(err);
     }
 
-    auth = await Auth.create({
+    // we get query from FE
+    const type = req.query.type ? (req.query.type as UserType) : UserType.USER;
+
+    let user;
+    let vendor;
+    let auth;
+
+    // create user
+    if (type === UserType.USER) {
+      const { firstName, lastName } = req.body;
+      user = await User.create({
+        firstName,
+        lastName,
+      });
+    }
+
+    // create vendor
+    else if (type === UserType.VENDOR) {
+      const { address, name } = req.body;
+      const { streetAddress, city, zip, state } = address;
+
+      vendor = await Vendor.create({
+        name,
+      });
+
+      await Address.create({
+        streetAddress,
+        city,
+        zip,
+        state,
+        VendorId: vendor.dataValues.id,
+      });
+    }
+
+    let authPayload: AuthData = {
       email,
       password,
+      authType: AuthType.CUSTOM,
       type: type,
-      UserId: type === UserType.USER && user ? user?.id : null,
-      // SellerId: type === UserType.USER && seller ? seller?.id : null,
-    });
+      UserId: type === UserType.USER && user ? user.dataValues.id : null,
+      VendorId:
+        type === UserType.VENDOR && vendor ? vendor.dataValues.id : null,
+    };
+    if (req.file && req.file?.fieldname) {
+      authPayload.avatar = `${process.env.IMAGE_DOMAIN}/media/${req.file?.filename}`;
+    }
+
+    auth = await Auth.create(authPayload);
+
     //@ts-ignore
     delete auth.dataValues.id;
+    delete auth.dataValues.UserId;
+    delete auth.dataValues.VendorId;
+
+    if (user) {
+      delete user.dataValues.id;
+    } else if (vendor) {
+      delete vendor?.dataValues.id;
+    }
+
+    const returnObject = {
+      auth,
+      [UserType.USER === type ? "user" : "vendor"]: user ? user : vendor,
+    };
 
     if (auth) {
       const token = await auth.generateMailToken();
 
-      await generateVerificationMail(auth.email, token);
+      await generateVerificationMail(auth.email, token, type);
 
-      res.status(201).send({ message: "Success", data: auth });
+      res.status(201).send({ message: "Success", data: returnObject });
     } else {
       const err = new BadRequestError("Bad Request");
       return next(err);
     }
   } catch (error: any) {
-    console.log(error.message);
     res.status(500).send({ message: error.message });
   }
 };
@@ -93,7 +139,7 @@ export const ResendVerificationMail = async (
     let { email } = req.body;
 
     // check if email exists:
-    const existingEmail = await Auth.findOne({
+    const existingEmail = await Auth.scope("withoutPassword").findOne({
       where: {
         email,
       },
@@ -105,16 +151,26 @@ export const ResendVerificationMail = async (
       return next(err);
     }
 
+    if (existingEmail.verified) {
+      const err = new BadRequestError("The user is already verified");
+      return next(err);
+    }
+
     const token = await existingEmail.generateMailToken();
-    const result = await generateVerificationMail(existingEmail.email, token);
+    const result = await generateVerificationMail(
+      existingEmail.email,
+      token,
+      req.query.type as UserType
+    );
     let message = "Success";
     if (result.rejected.length) {
-      message = "Error, Failed to send an email";
+      const err = new ServerError("Error, Failed to send an email");
+      return next(err);
     }
     res.send({ message });
   } catch (error) {
     // next(error);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -129,9 +185,9 @@ export const googleSignin = async (
     const type = req.query.type as UserType;
 
     let { contact, profileImage = null, googleToken } = req.body; //for AUTH and general use
-    const { name } = req.body; //for USER
+    const { firstName, lastName } = req.body; //for USER
     const { storeName, mobile } = req.body; //for SELLER
-    let seller;
+    let vendor;
     let user;
     let authType = AuthType.SOCIAL;
     let auth;
@@ -160,7 +216,8 @@ export const googleSignin = async (
     if (!auth) {
       if (type === UserType.USER) {
         user = await User.create({
-          name,
+          firstName,
+          lastName,
         });
       }
 
@@ -168,13 +225,13 @@ export const googleSignin = async (
         email,
         type: type,
         UserId: type === UserType.USER && user ? user?.id : null,
-        // SellerId: type === UserType.USER && seller ? seller?.id : null,
+        // SellerId: type === UserType.USER && vendor ? vendor?.id : null,
       });
       //@ts-ignore
       delete auth.User.dataValues.id;
 
       const token = await auth.generateMailToken();
-      await generateVerificationMail(auth.email, token);
+      await generateVerificationMail(auth.email, token, type);
       res.send({ message: "Success", data: auth });
       return;
     } else {
@@ -187,7 +244,8 @@ export const googleSignin = async (
         });
 
         if (user) {
-          user.name = name ? name : user.name;
+          user.firstName = firstName ? firstName : user.firstName;
+          user.lastName = lastName ? lastName : user.lastName;
           await user.save();
         }
       }
@@ -226,7 +284,7 @@ export const googleSignin = async (
     if (error.message) {
       console.log(error.message);
     }
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -255,7 +313,7 @@ export const verifyEmailAddress = async (
       },
     });
     if (!auth) {
-      const err = new BadRequestError("could not find user with this email");
+      const err = new UnprocessableError("could not find user with this email");
       return next(err);
     }
 
@@ -266,10 +324,17 @@ export const verifyEmailAddress = async (
       },
     });
 
+    if (auth.verified) {
+      return res.status(200).send({
+        message: "User is already verified",
+      });
+    }
+
     if (mailToken !== 1) {
-      const err = new BadRequestError("Couldn't verify, please try again");
+      const err = new UnprocessableError("Couldn't verify, please try again");
       return next(err);
     }
+
     auth.verified = true;
     auth.status = AuthStatus.USER_VERIFIED;
     await auth.save();
@@ -279,7 +344,9 @@ export const verifyEmailAddress = async (
       status: auth.status,
     });
   } catch (error) {
-    res.status(500).send({ message: error });
+    // next(error);
+    // const err = new ServerError();
+    next(error);
   }
 };
 
@@ -291,47 +358,44 @@ export const signin = async (
 ) => {
   try {
     const { email, password } = req.body;
-    // find user with scope of 'withPassword' so that we can compare passwords otherwise without using scope we won't get password
-
-    let user = await Auth.scope("withPassword").findOne({
+    const type = req.query.type as UserType;
+    let auth = await Auth.scope("withPassword").findOne({
       where: {
         email,
+        type
       },
-      // attributes: ['id', 'email', 'password', 'type', 'verified'],
     });
 
-    // if user is not found
-    if (!user) {
-      let err = new BadRequestError("Unable to login, User is not found");
+    if (!auth) {
+      let err = new BadRequestError("Unable to login, User not found");
       return next(err);
     }
     // if account is not verified
 
-    if (!user?.verified) {
+    if (!auth?.verified) {
       const err = new AuthError("Please verify your profile");
       return next(err);
     }
     // compare passwords
-    const isMatch = await bcrypt.compare(password, user.password as string);
+    const isMatch = await bcrypt.compare(password, auth.password as string);
 
     if (!isMatch) {
       let err = new BadRequestError("Unable to login, wrong credentials");
       return next(err);
     }
 
-    // generate new access and refresh tokens when user signs in
-    const accessToken = user.generateJWT();
+    // generate new access and refresh tokens when auth signs in
+    const accessToken = auth.generateJWT();
 
-    const refreshToken = user.generateJWT(
+    const refreshToken = auth.generateJWT(
       process.env.JWT_REFRESH_EXPIRY,
       "refresh"
     );
-    console.log("accessToken", accessToken);
-    console.log("refreshToken", refreshToken);
+
     // save refresh token to database
     await Token.create({
       token: refreshToken,
-      AuthId: user.id as number, //authId
+      AuthId: auth.id as number, //authId
     });
 
     // option for cookies
@@ -342,22 +406,25 @@ export const signin = async (
       // domain: 'http://localhost:8080',
     };
 
-    user = await Auth.findOne({
+    auth = await Auth.findOne({
       where: {
         email,
+        type
       },
       include: {
-        model: User, // will add seller model later
+        model: type === UserType.USER ? User : Vendor,
       },
     });
     // sending refresh token to FE using cookies
     res.cookie("refresh_token", refreshToken, cookieOptions);
     // sending data and access_token via response
-    res.send({ user, accessToken, message: "Success" });
+
+    res.send({
+      data: { ...auth?.dataValues, accessToken },
+      message: "Success",
+    });
   } catch (error: any) {
-    console.log("error-----", error.message);
-    res.status(500).send({ message: error });
-    // next(error);
+    next(error);
   }
 };
 
@@ -448,7 +515,7 @@ export const refreshToken = async (
   } catch (error) {
     res.clearCookie("refresh_token");
     // next(error);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -461,19 +528,28 @@ export const signout = async (
   try {
     const { refresh_token } = req.cookies;
 
+    const auth = await Auth.scope("withoutPasswordAndVerified").findOne({
+      where: {
+        email: req.user.email,
+      },
+    });
     if (refresh_token) {
-      await Token.destroy({
+      const result: any = await Token.destroy({
         where: {
-          AuthId: req.user.id,
+          AuthId: auth?.id,
           token: refresh_token,
         },
       });
+      if (!result) {
+        const err = new BadRequestError("Invalid token");
+        res.status(err.status).send({ message: err.message });
+        return;
+      }
     }
     res.clearCookie("refresh_token");
-    res.sendStatus(204);
+    res.send({ message: "Success" });
   } catch (error) {
-    // next(error);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -500,12 +576,12 @@ export const resetPasswordMail = async (
       return next(err);
     }
     const mailToken = await user.generateMailToken();
-    generateResetPasswordMail(user.email, mailToken);
+    generateResetPasswordMail(user.email, mailToken, user.type);
 
     res.send({ message: "Please check your email to reset password" });
   } catch (error) {
     // next(error);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -528,9 +604,9 @@ export const resetPassword = async (
     });
 
     if (!user) {
-      const err = new Error() as CustomError;
-      err.message = "Couldn't reset password, please try again";
-      err.status = 401;
+      const err = new UnprocessableError(
+        "Couldn't reset password, please try again"
+      );
       return next(err);
     }
     const mailToken = await MailToken.destroy({
@@ -539,20 +615,20 @@ export const resetPassword = async (
         email: user.email,
       },
     });
+
     if (mailToken !== 1) {
-      const err = new Error() as CustomError;
-      err.message = "Couldn't reset password, please try again";
-      err.status = 401;
+      const err = new UnprocessableError(
+        "Couldn't reset password, please try again"
+      );
       return next(err);
     }
-
     user.password = password;
     await user.save();
     res.send({ message: "Password updated successfully" });
   } catch (error) {
     console.log(error);
-    // next(err);
-    res.status(500).send({ message: error });
+    next(error);
+    // next(error);
   }
 };
 export const resetPasswordWithoutMail = async (
@@ -562,6 +638,7 @@ export const resetPasswordWithoutMail = async (
 ) => {
   try {
     const { oldPassword, newPassword } = req.body;
+
     const user = await Auth.scope("withPassword").findOne({
       where: {
         email: req.user.email,
@@ -584,7 +661,7 @@ export const resetPasswordWithoutMail = async (
   } catch (error) {
     console.log(error);
     // next(err);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -595,7 +672,7 @@ export const deleteAccount = async (
   next: NextFunction
 ) => {
   try {
-    const { email } = req.body;
+    const { email, password } = req.body;
 
     const user = await Auth.scope("withoutPasswordAndVerified").findOne({
       where: {
@@ -605,6 +682,14 @@ export const deleteAccount = async (
 
     if (!user) {
       const err = new BadRequestError("User Not Found");
+      return next(err);
+    }
+
+    // compare passwords
+    const isMatch = await bcrypt.compare(password, user.password as string);
+
+    if (!isMatch) {
+      let err = new BadRequestError("Wrong credentials");
       return next(err);
     }
     if (user) {
@@ -625,6 +710,12 @@ export const deleteAccount = async (
           id: user.UserId,
         },
       });
+    } else if (user.VendorId && user.type === UserType.VENDOR) {
+      await Vendor.destroy({
+        where: {
+          id: user.VendorId,
+        },
+      });
     }
 
     res.send({
@@ -633,7 +724,7 @@ export const deleteAccount = async (
   } catch (error) {
     console.log(error);
     // next(err);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 

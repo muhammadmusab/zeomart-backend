@@ -66,7 +66,7 @@ export const Create = async (
     });
   } catch (error: any) {
     console.log(error.message);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -94,6 +94,6 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
       data,
     });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };

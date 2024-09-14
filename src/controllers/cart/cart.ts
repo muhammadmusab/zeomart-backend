@@ -58,7 +58,7 @@ export const Create = async (
       data: cart,
     });
   } catch (error: any) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -96,17 +96,17 @@ export const CreateUpdate = async (
     }
 
     // if product has variant then it requires FE to send product sku unique id
-    if (product?.multipart && !productSkuUniqueId) {
+    if (product?.hasVariants && !productSkuUniqueId) {
       return res.status(403).send({
         message: "productSkuUniqueId required",
       });
     }
 
     // calculating subtotal
-    if (product?.multipart && productSku) {
+    if (product?.hasVariants && productSku) {
       subTotal = productSku?.currentPrice * quantity;
     } else {
-      subTotal = (product?.basePrice as number) * quantity;
+      subTotal = (product?.currentPrice as number) * quantity;
     }
 
     let cart = null;
@@ -224,7 +224,7 @@ export const CreateUpdate = async (
       },
     });
   } catch (error: any) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -248,7 +248,7 @@ export const Delete = async (
       res.status(err.status).send({ message: err.message });
     }
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Get = async (req: Request, res: Response, next: NextFunction) => {
@@ -292,7 +292,7 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
       data: { cart: cartData, cartItem: cartItemData },
     });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const List = async (req: Request, res: Response, next: NextFunction) => {
@@ -310,7 +310,7 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
       data: cartData,
     });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -471,7 +471,7 @@ export const CalculateTotal = async (
       },
     });
   } catch (error: any) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -503,6 +503,6 @@ export const UpdateOrderStatus = async (
       data: cart,
     });
   } catch (error: any) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };

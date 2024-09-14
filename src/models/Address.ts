@@ -14,14 +14,14 @@ interface AddressModel
   > {
   id?: CreationOptional<number>;
   uuid: CreationOptional<string>;
-  name: string;
-  address1: string;
-  address2: string;
-  postalCode: string;
+  streetAddress: string;
   city: string;
-  country: string;
-  // CompanyId?: number;
+  zip: string;
+  state: string;
+  type?: string;
+  VendorId?: number;
   UserId?: number;
+  default?:boolean;
 }
 export const Address = sequelize.define<AddressModel>(
   "Address",
@@ -31,19 +31,7 @@ export const Address = sequelize.define<AddressModel>(
       defaultValue: UUIDV4,
       unique: true,
     },
-    name: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    address1: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    address2: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    postalCode: {
+    streetAddress: {
       type: DataTypes.STRING,
       allowNull: false,
     },
@@ -51,18 +39,28 @@ export const Address = sequelize.define<AddressModel>(
       type: DataTypes.STRING,
       allowNull: false,
     },
-
-    country: {
+    zip: {
       type: DataTypes.STRING,
       allowNull: false,
     },
-    // CompanyId: {
-    //   type: DataTypes.INTEGER,
-    //   references: {
-    //     model: 'Companies',
-    //     key: 'id',
-    //   },
-    // },
+    state: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    type: {
+      type: DataTypes.STRING,
+    },
+    default:{
+      type:DataTypes.BOOLEAN,
+      defaultValue:false
+    },
+    VendorId: {
+      type: DataTypes.INTEGER,
+      references: {
+        model: "Vendors",
+        key: "id",
+      },
+    },
     UserId: {
       type: DataTypes.INTEGER,
       references: {
@@ -73,7 +71,7 @@ export const Address = sequelize.define<AddressModel>(
   },
   {
     defaultScope: {
-      attributes: { exclude: ["id", "UserId"] },
+      attributes: { exclude: ["id", "UserId", "VendorId"] },
     },
     scopes: {
       withId: {

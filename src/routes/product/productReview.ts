@@ -23,7 +23,7 @@ router.post(
   authMiddleware(),
   Create
 );
-router.put(
+router.patch(
   "/update/:uid",
   validate(updateProductReviewSchema),
   authMiddleware(),

@@ -20,48 +20,53 @@ import {
   listProductVariantSchema,
   setDefaultVariantSchema,
 } from "../../schemas/product/productVariant";
+import authMiddleware from "../../middlewares/auth-middleware";
+import { UserType } from "../../types/model-types";
+import filtersMiddleware from "../../middlewares/filters-middleware";
 
 const router = express.Router();
 
 router.post(
   "/create",
   validate(createProductVariantSchema),
-  basicAuthMiddleware,
+  authMiddleware(UserType.VENDOR),
   Create
 );
 router.post(
   "/assign",
   validate(assignVariantSchema),
-  basicAuthMiddleware,
+  authMiddleware(UserType.VENDOR),
   AssignVariants
 );
 router.post(
   "/set-default",
   validate(setDefaultVariantSchema),
-  basicAuthMiddleware,
+  authMiddleware(UserType.VENDOR),
   setDefaultVariant
 );
 
-router.get(
-  "/get/:uid",
-  validate(getProductVariantSchema),
-  Get
-);
-router.put(
+router.get("/get/:uid", validate(getProductVariantSchema), Get);
+router.patch(
   "/update/:uid",
   validate(updateProductVariantSchema),
-  basicAuthMiddleware,
+  authMiddleware(UserType.VENDOR),
   Update
 );
 
 router.delete(
   "/delete/:uid",
   validate(deleteProductVariantSchema),
-  basicAuthMiddleware,
+  authMiddleware(UserType.VENDOR),
   Delete
 );
 
 router.get("/list/:uid", List);
-router.post("/assigned-list", validate(listProductVariantSchema), AssignedList);
+
+router.get(
+  "/assigned-list",
+  filtersMiddleware,
+  validate(listProductVariantSchema),
+  AssignedList
+);
 
 export default router;

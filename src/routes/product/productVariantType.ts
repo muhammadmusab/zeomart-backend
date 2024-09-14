@@ -24,7 +24,7 @@ router.post(
 );
 // router.get("/get/:uid", validate(getProductVariantTypeSchema), Get);
 
-router.put(
+router.patch(
   "/update/:uid",
   validate(updateProductVariantTypeSchema),
   basicAuthMiddleware,

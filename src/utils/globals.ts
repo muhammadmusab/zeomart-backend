@@ -1,1 +1,1 @@
-export const PLATFORM_NAME = 'Phm'
+export const PLATFORM_NAME = 'zeomart'

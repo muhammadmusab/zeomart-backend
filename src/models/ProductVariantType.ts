@@ -16,7 +16,6 @@ interface ProductVariantTypeModel
   ProductId?: CreationOptional<number>;
   uuid: CreationOptional<string>;
   ProductTypeId?: number;
-  elementType: string;
 }
 export const ProductVariantType = sequelize.define<ProductVariantTypeModel>(
   "ProductVariantTypes",
@@ -33,12 +32,6 @@ export const ProductVariantType = sequelize.define<ProductVariantTypeModel>(
         model: "ProductTypes",
         key: "id",
       },
-    },
-    elementType: {
-      // html element type like select ,range ,number, radio, checkbox,
-      type: DataTypes.STRING,
-      allowNull: false,
-      // unique: true,
     },
     ProductId: {
       type: DataTypes.INTEGER,

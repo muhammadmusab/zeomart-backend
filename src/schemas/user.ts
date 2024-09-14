@@ -2,10 +2,9 @@ import * as yup from 'yup'
 
 export const updateUserSchema = yup.object({
   body: yup.object({
-    name: yup.string(),
-    gender: yup.string().oneOf(['male','female']),
-    dob: yup.string(),
-    mobile: yup.number(),
+    firstName: yup.string(),
+    lastName: yup.string(),
+    phone: yup.number(),
   }),
 });
 

@@ -44,7 +44,7 @@ export const CreateUpdate = async (
         },
       });
 
-      if (productVariantValueUniqueId && product.multipart) {
+      if (productVariantValueUniqueId && product.hasVariants) {
         productVariant = await ProductVariantValues.scope("withId").findOne({
           where: {
             uuid: productVariantValueUniqueId,
@@ -90,7 +90,7 @@ export const CreateUpdate = async (
     });
   } catch (error: any) {
     console.log(error.message);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -114,7 +114,7 @@ export const Delete = async (
       res.status(err.status).send({ message: err.message });
     }
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -165,7 +165,7 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
       data,
     });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -232,6 +232,6 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     res.send({ message: "Success", data: favs, total });
   } catch (error: any) {
     console.log(error.message);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };

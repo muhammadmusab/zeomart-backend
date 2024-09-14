@@ -1,5 +1,4 @@
 import express from "express";
-import basicAuthMiddleware from "../../middlewares/basic-auth-middleware";
 import {
   Create,
   Get,
@@ -15,36 +14,46 @@ import {
   deleteProductSchema,
   listProductSchema,
 } from "../../schemas/product/product";
+import authMiddleware from "../../middlewares/auth-middleware";
+import { UserType } from "../../types/model-types";
+import { uploadMiddleware } from "../../middlewares/upload-middleware";
+import { Upload } from "../../utils/upload-function";
+import filtersMiddleware from "../../middlewares/filters-middleware";
 
 const router = express.Router();
 
 router.post(
   "/create",
   validate(createProductSchema),
-  basicAuthMiddleware,
+  authMiddleware(UserType.VENDOR),
   Create
 );
-router.post(
-  "/get",
+router.get(
+  "/get/:uid",
   validate(getProductSchema),
-  basicAuthMiddleware,
+  filtersMiddleware,
   Get
 );
 
-router.put(
+router.patch(
   "/update/:uid",
   validate(updateProductSchema),
-  basicAuthMiddleware,
+  authMiddleware(UserType.VENDOR),
   Update
 );
 
 router.delete(
   "/delete/:uid",
   validate(deleteProductSchema),
-  basicAuthMiddleware,
+  authMiddleware(UserType.VENDOR),
   Delete
 );
-
+router.post(
+  "/upload",
+  uploadMiddleware().array("media",5),
+  authMiddleware(UserType.VENDOR),
+  Upload()
+);
 router.get("/list", validate(listProductSchema), List);
 
 export default router;

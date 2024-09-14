@@ -1,25 +1,24 @@
-import express from 'express';
-import cors, { CorsOptions } from 'cors';
-import cookieParser from 'cookie-parser';
-import rateLimit from 'express-rate-limit';
-import { errorHandler } from './middlewares/error-middleware';
-import { PLATFORM_NAME } from './utils/globals';
-import logger from 'morgan';
-import path from 'path';
+import express from "express";
+import cors, { CorsOptions } from "cors";
+import cookieParser from "cookie-parser";
+import rateLimit from "express-rate-limit";
+import { errorHandler } from "./middlewares/error-middleware";
+import { PLATFORM_NAME } from "./utils/globals";
+import logger from "morgan";
+import path from "path";
 
-import { sequelize } from './config/db';
+import { sequelize } from "./config/db";
 // @ts-ignore
 global.PLATFORM_NAME = PLATFORM_NAME;
 const app = express();
 
 app.use(cookieParser());
 const whitelist = [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:4000',
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:4000",
   process.env.FORWARDED_URL,
 ];
-app.use(cookieParser());
 
 const corsOptions = {
   origin: function (origin, callback) {
@@ -30,75 +29,81 @@ const corsOptions = {
     if (whitelist.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(new Error("Not allowed by CORS"));
     }
   },
 } as CorsOptions;
-if (process.env.NODE_ENV === 'production') {
+if (process.env.NODE_ENV === "production") {
   corsOptions.credentials = true;
 }
 
-app.use(logger('dev'));
+app.use(logger("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-
-app.use(
-  cors({
-    origin: '*',
-  }),
-);
+// {
+//   origin: 'http://localhost:3000',
+//   methods:['GET','POST','PATCH','DELETE','OPTIONS'],
+//   allowedHeaders:['Content-Type','Authorization'],
+//   credentials:true
+// }
+app.use(cors());
 // ASSOCIATIONS
-import './utils/associations';
-app.use('/media', express.static(path.join(__dirname, 'media')));
+import "./utils/associations";
+app.use("/media", express.static(path.join(__dirname, "media")));
 
 // Routes
-import authRoutes from './routes/auth';
-import userRoutes from './routes/user';
-import addressRoutes from './routes/address';
-import categoryRoutes from './routes/category';
-import filterRoutes from './routes/filter';
+import authRoutes from "./routes/auth";
+import userRoutes from "./routes/user";
+import vendorRoutes from "./routes/vendor";
+import vendorSocialRoutes from "./routes/vendor-social";
+import addressRoutes from "./routes/address";
+import categoryRoutes from "./routes/category";
+import filterRoutes from "./routes/filter";
 // product
-import productRoutes from './routes/product/product'
-import productImageRoutes from './routes/product/productImage'
-import productVariantRoutes from './routes/product/productVariant'
-import productVariantTypeRoutes from './routes/product/productVariantType'
-import productTypesRoutes from './routes/product/productTypes'
-import productSkuRoutes from './routes/product/productSku'
-import productReviewRoutes from './routes/product/productReview'
-import productFavouritesRoutes from './routes/product/productFavourites'
+import productRoutes from "./routes/product/product";
+import brandRoutes from "./routes/product/brand";
+import productVariantRoutes from "./routes/product/productVariant";
+import productVariantTypeRoutes from "./routes/product/productVariantType";
+import productTypesRoutes from "./routes/product/productTypes";
+import productSkuRoutes from "./routes/product/productSku";
+import productReviewRoutes from "./routes/product/productReview";
+import productFavouritesRoutes from "./routes/product/productFavourites";
 // cart
-import cartRoutes from './routes/cart/cart'
-import cartItemRoutes from './routes/cart/cartItem'
+import cartRoutes from "./routes/cart/cart";
+import cartItemRoutes from "./routes/cart/cartItem";
 
-import couponRoutes from './routes/coupon'
-import shippingRoutes from './routes/shipping'
+import couponRoutes from "./routes/coupon";
+import shippingRoutes from "./routes/shipping";
 
+app.use("/v1/api/auth", authRoutes);
+app.use("/v1/api/user", userRoutes);
+app.use("/v1/api/vendor", vendorRoutes);
+app.use("/v1/api/vendor/social", vendorSocialRoutes);
+app.use("/v1/api/address", addressRoutes);
+app.use("/v1/api/category", categoryRoutes);
+app.use("/v1/api/filter", filterRoutes);
 
-app.use('/v1/api/auth', authRoutes);
-app.use('/v1/api/user', userRoutes);
-app.use('/v1/api/address', addressRoutes);
-app.use('/v1/api/category', categoryRoutes);
-app.use('/v1/api/filter', filterRoutes);
+app.use("/v1/api/brand", brandRoutes);
 
 // product
-app.use('/v1/api/product', productRoutes);
-app.use('/v1/api/product/image', productImageRoutes);
-app.use('/v1/api/product/types', productTypesRoutes);
-app.use('/v1/api/product/variant', productVariantRoutes);
-app.use('/v1/api/product/variant-type', productVariantTypeRoutes);
-app.use('/v1/api/product/sku', productSkuRoutes);
-app.use('/v1/api/product/review', productReviewRoutes);
-app.use('/v1/api/product/favourites', productFavouritesRoutes);
+app.use("/v1/api/product", productRoutes);
+
+app.use("/v1/api/product/types", productTypesRoutes);
+app.use("/v1/api/product/variant", productVariantRoutes);
+app.use("/v1/api/product/variant-type", productVariantTypeRoutes);
+app.use("/v1/api/product/sku", productSkuRoutes);
+app.use("/v1/api/product/review", productReviewRoutes);
+app.use("/v1/api/product/favourites", productFavouritesRoutes);
 
 // cart
-app.use('/v1/api/cart', cartRoutes);
-app.use('/v1/api/cart-item', cartItemRoutes);
+// app.use('/v1/api/cart', cartRoutes);
+// app.use('/v1/api/cart-item', cartItemRoutes);
 
 //coupon
-app.use('/v1/api/coupon',couponRoutes);
+// app.use('/v1/api/coupon',couponRoutes);
 
 //shipping
-app.use('/v1/api/shipping',shippingRoutes);
+app.use("/v1/api/shipping", shippingRoutes);
 
 //Error Handler
 app.use(errorHandler);
@@ -116,11 +121,12 @@ const limiter = rateLimit({
 app.use(limiter);
 try {
   sequelize.authenticate().then(() => {
-    console.log('Connection has been established successfully.');
+    // await sequelize.sync({alter:true})
+    console.log("Connection has been established successfully.");
     app.listen(port);
-    console.log('listening to port ', port);
+    console.log("listening to port ", port);
   });
 } catch (error) {
-  console.error('Unable to connect to the database:', error);
+  console.error("Unable to connect to the database:", error);
 }
 export default app;

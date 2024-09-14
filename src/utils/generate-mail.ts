@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import hbs from 'nodemailer-express-handlebars';
 import nodemailerSendgrid from 'nodemailer-sendgrid';
 import path from 'path';
+import { UserType } from '../types/model-types';
 
 
 const mailconfig = () => {
@@ -28,7 +29,7 @@ const mailconfig = () => {
   return transporter;
 };
 
-export const generateVerificationMail = async (email: string, token: string) => {
+export const generateVerificationMail = async (email: string, token: string,type:UserType) => {
   try {
     const transporter = mailconfig();
     
@@ -41,7 +42,7 @@ export const generateVerificationMail = async (email: string, token: string) => 
         token: token,
         // @ts-ignore
         platformname: PLATFORM_NAME,
-        url: `${process.env.DOMAIN}/auth/verification?token=${token}`,
+        url: `${process.env.DOMAIN}/verification?token=${token}&type=${type}`,
       },
     };
    
@@ -53,7 +54,7 @@ export const generateVerificationMail = async (email: string, token: string) => 
   }
 };
 
-export const generateResetPasswordMail = async (email: string, token: string) => {
+export const generateResetPasswordMail = async (email: string, token: string,type:UserType) => {
   try {
     const transporter = mailconfig();
     const Config = {
@@ -62,7 +63,7 @@ export const generateResetPasswordMail = async (email: string, token: string) =>
       subject: 'Password reset',
       template: 'reset-password',
       context: {
-        url: `${process.env.DOMAIN}/auth/reset-password?token=${token}`,
+        url: `${process.env.DOMAIN}/reset-password?token=${token}&type=${type}`,
       },
     };
    

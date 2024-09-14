@@ -14,17 +14,15 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
       defaultValue: UUIDV4,
       unique: true,
     },
-    name: {
+    firstName: {
       type: DataTypes.STRING,
       allowNull: false,
     },
-    gender: {
+    lastName: {
       type: DataTypes.STRING,
+      allowNull: false,
     },
-    dob: {
-      type: DataTypes.STRING,
-    },
-    mobile: {
+    phone: {
       type: DataTypes.STRING,
     },
     createdAt: {

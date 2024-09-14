@@ -7,6 +7,7 @@ import {
   InferCreationAttributes,
   UUIDV4,
 } from "sequelize";
+import { Media } from "./Media";
 interface CategoryModel
   extends Model<
     InferAttributes<CategoryModel>,
@@ -15,7 +16,9 @@ interface CategoryModel
   id?: CreationOptional<number>; // categoryId
   uuid: CreationOptional<string>;
   title: string;
-  parentId: number | null;
+  slug: string;
+  image: string;
+  parentId?: number | null;
 }
 export const Category = sequelize.define<CategoryModel>(
   "Category",
@@ -28,6 +31,14 @@ export const Category = sequelize.define<CategoryModel>(
     title: {
       type: DataTypes.STRING,
       allowNull: false,
+    },
+    slug: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+    },
+    image: {
+      type: DataTypes.STRING,
     },
     parentId: {
       type: DataTypes.INTEGER,
@@ -50,3 +61,23 @@ export const Category = sequelize.define<CategoryModel>(
     },
   }
 );
+Category.beforeBulkDestroy((options: any) => {
+  options.individualHooks = true;
+  return options;
+});
+async function deleteMedia(category: any, options: any) {
+  const instance = await Category.scope("withId").findOne({
+    where: {
+      uuid: category.uuid,
+    },
+  });
+  if (instance) {
+    await Media.destroy({
+      where: {
+        mediaableId: instance?.id,
+        mediaableType: "Category",
+      },
+    });
+  }
+}
+Category.beforeDestroy(deleteMedia);

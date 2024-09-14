@@ -52,7 +52,7 @@ export const Create = async (
     });
   } catch (error: any) {
     console.log(error);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Update = async (
@@ -86,7 +86,7 @@ export const Update = async (
     }
     res.send({ message: "Success", data: result });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Delete = async (
@@ -109,7 +109,7 @@ export const Delete = async (
       res.status(err.status).send({ message: err.message });
     }
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Get = async (req: Request, res: Response, next: NextFunction) => {
@@ -127,7 +127,7 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
       data,
     });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -209,6 +209,6 @@ export const Apply = async (
       },
     });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };

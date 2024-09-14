@@ -7,6 +7,7 @@ import {
   InferCreationAttributes,
   UUIDV4,
 } from "sequelize";
+import { Media } from "./Media";
 interface ProductSkusModel
   extends Model<
     InferAttributes<ProductSkusModel>,
@@ -20,49 +21,73 @@ interface ProductSkusModel
   sku: CreationOptional<string>;
   ProductId?: number | null;
 }
-export const ProductSkus =
-  sequelize.define<ProductSkusModel>(
-    "ProductSkus",
-    {
-      uuid: {
-        type: DataTypes.UUID,
-        defaultValue: UUIDV4,
-        unique: true,
-      },
-      ProductId: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: {
-          model: "Products",
-          key: "id",
-        },
-      },
-      sku: {
-        type: DataTypes.STRING,
-        unique: true,
-      },
-      oldPrice: {
-        type: DataTypes.DECIMAL(12, 2),
-      },
-
-      currentPrice: {
-        type: DataTypes.DECIMAL(12, 2),
-      },
-      quantity: {
-        type: DataTypes.INTEGER,
+export const ProductSkus = sequelize.define<ProductSkusModel>(
+  "ProductSkus",
+  {
+    uuid: {
+      type: DataTypes.UUID,
+      defaultValue: UUIDV4,
+      unique: true,
+    },
+    ProductId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: "Products",
+        key: "id",
       },
     },
-    {
-      freezeTableName: true,
-      defaultScope: {
-        attributes: { exclude: ["id", "ProductId"] },
-      },
-      scopes: {
-        withId: {
-          attributes: {
-            exclude: [],
-          },
+    sku: {
+      type: DataTypes.STRING,
+      unique: true,
+    },
+    oldPrice: {
+      type: DataTypes.DECIMAL(12, 2),
+    },
+
+    currentPrice: {
+      type: DataTypes.DECIMAL(12, 2),
+    },
+    quantity: {
+      type: DataTypes.INTEGER,
+    },
+  },
+  {
+    freezeTableName: true,
+    defaultScope: {
+      attributes: { exclude: ["id", "ProductId"] },
+    },
+    scopes: {
+      withId: {
+        attributes: {
+          exclude: [],
         },
       },
-    }
-  );
+    },
+  }
+);
+
+
+
+
+
+ProductSkus.beforeBulkDestroy((options: any) => {
+  options.individualHooks = true;
+  return options;
+});
+async function deleteMedia(category: any, options: any) {
+  const instance = await ProductSkus.scope("withId").findOne({
+    where: {
+      uuid: category.uuid,
+    },
+  });
+  if (instance) {
+    await Media.destroy({
+      where: {
+        mediaableId: instance?.id,
+        mediaableType: "ProductSkus",
+      },
+    });
+  }
+}
+ProductSkus.beforeDestroy(deleteMedia);

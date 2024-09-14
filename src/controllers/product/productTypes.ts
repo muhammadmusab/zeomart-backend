@@ -21,7 +21,7 @@ export const Create = async (
       data: productType,
     });
   } catch (error: any) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Update = async (
@@ -53,7 +53,7 @@ export const Update = async (
 
     res.send({ message: "Success", data: productVariant });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Delete = async (
@@ -76,7 +76,7 @@ export const Delete = async (
       res.status(err.status).send({ message: err.message });
     }
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Get = async (req: Request, res: Response, next: NextFunction) => {
@@ -103,7 +103,7 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
       res.status(err.status).send({ message: err.message });
     }
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const List = async (req: Request, res: Response, next: NextFunction) => {
@@ -113,6 +113,6 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     res.send({ message: "Success", data });
   } catch (error: any) {
     console.log(error.message);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };

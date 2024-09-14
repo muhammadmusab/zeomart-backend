@@ -22,7 +22,7 @@ export const Create = async (
       },
     });
     let productSku = null;
-    if (product?.multipart === false && ProductSkuUniqueId) {
+    if (product?.hasVariants === false && ProductSkuUniqueId) {
       productSku = await ProductSkus.scope("withId").findOne({
         where: {
           uuid: ProductSkuUniqueId,
@@ -55,7 +55,7 @@ export const Create = async (
     res.send({ message: "Success", data: review });
   } catch (error: any) {
     console.log(error.message);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Update = async (
@@ -82,7 +82,7 @@ export const Update = async (
     }
     res.send({ message: "Success", data: result });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Delete = async (
@@ -109,7 +109,7 @@ export const Delete = async (
       res.status(err.status).send({ message: err.message });
     }
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -129,7 +129,7 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     });
 
     let productSku = null;
-    if (product?.multipart && ProductSkuUniqueId) {
+    if (product?.hasVariants && ProductSkuUniqueId) {
       productSku = await ProductSkus.scope("withId").findOne({
         where: {
           uuid: ProductSkuUniqueId as string,
@@ -168,6 +168,6 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     res.send({ message: "Success", data: images, total });
   } catch (error: any) {
     console.log(error.message);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };

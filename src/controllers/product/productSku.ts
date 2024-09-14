@@ -8,8 +8,7 @@ import { ProductVariantType } from "../../models/ProductVariantType";
 import { ProductVariantValues } from "../../models/ProductVariantValue";
 import { SkuVariations } from "../../models/SkuVariation";
 import { ProductSkus } from "../../models/ProductSku";
-import { ProductImage } from "../../models/ProductImage";
-import { Sequelize } from "sequelize";
+
 
 export const Create = async (
   req: Request,
@@ -17,15 +16,15 @@ export const Create = async (
   next: NextFunction
 ) => {
   try {
-    let { oldPrice, currentPrice, quantity, sku, productUniqueId } = req.body;
+    let { oldPrice, currentPrice, quantity, sku, product } = req.body;
 
-    const product = await Product.scope("withId").findOne({
+    const _product = await Product.scope("withId").findOne({
       where: {
-        uuid: productUniqueId,
+        uuid: product,
       },
     });
 
-    if (!product) {
+    if (!_product) {
       return res.status(403).send({ message: "Product not found" });
     }
 
@@ -35,11 +34,11 @@ export const Create = async (
       currentPrice,
       quantity,
       sku,
-      ProductId: product.id,
+      ProductId: _product.id,
     });
 
-    delete product.dataValues.id;
-    delete product.dataValues.CategoryId;
+    delete _product.dataValues.id;
+    delete _product.dataValues.CategoryId;
     delete productSkus.dataValues.id;
     delete productSkus.dataValues.ProductId;
 
@@ -51,7 +50,7 @@ export const Create = async (
     });
   } catch (error: any) {
     console.log(error.message);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Update = async (
@@ -89,7 +88,7 @@ export const Update = async (
     }
     res.send({ message: "Success", data: productVariantValue });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Get = async (req: Request, res: Response, next: NextFunction) => {
@@ -104,7 +103,7 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
 
     res.send({ message: "Success", data: productVariant });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Delete = async (
@@ -127,7 +126,7 @@ export const Delete = async (
       res.status(err.status).send({ message: err.message });
     }
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -158,6 +157,6 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     res.send({ message: "Success", data: productVariations });
   } catch (error: any) {
     console.log(error.message);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };

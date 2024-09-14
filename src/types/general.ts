@@ -1,25 +1,17 @@
-import { UserType } from "./model-types";
+import { UserData, UserType, VendorData } from "./model-types";
 
 export interface IAuthAttrs {
   id?: number;
   email: string;
   password: string;
   verified: boolean;
-  User?: {
-    id?: number;
-    uuid?: string;
-    name: string;
-    email: string;
-    mobile?: string;
-    gender?: string;
-    dob?: string;
-  };
+  User?: UserData;
+  Vendor?: VendorData;
 }
 
 export interface IAuthModel extends IAuthAttrs {
   verified: boolean;
   type: UserType;
-
 }
 
 export interface CustomError extends Error {
@@ -56,4 +48,9 @@ export function verifyDecodedToken(
 
 export interface AnyObj {
   [key: string]: any;
+}
+
+export enum ADRESSTYPE {
+  BILLING = "billing",
+  shipping = "shipping",
 }

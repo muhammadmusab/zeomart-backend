@@ -7,7 +7,6 @@ import {
   InferCreationAttributes,
   UUIDV4,
 } from "sequelize";
-import { Gender } from "../types/model-types";
 interface UserModel
   extends Model<
     InferAttributes<UserModel>,
@@ -15,10 +14,9 @@ interface UserModel
   > {
   id?: CreationOptional<number>;
   uuid: CreationOptional<string>;
-  name?: string;
-  dob?: CreationOptional<string>;
-  mobile?: CreationOptional<string>;
-  gender?: Gender;
+  firstName: string;
+  lastName: string;
+  phone?: string;
 }
 export const User = sequelize.define<UserModel>(
   "User",
@@ -28,17 +26,15 @@ export const User = sequelize.define<UserModel>(
       defaultValue: UUIDV4,
       unique: true,
     },
-    name: {
+    firstName: {
       type: DataTypes.STRING,
       allowNull: false,
     },
-    gender: {
+    lastName: {
       type: DataTypes.STRING,
+      allowNull: false,
     },
-    dob: {
-      type: DataTypes.STRING,
-    },
-    mobile: {
+    phone: {
       type: DataTypes.STRING,
     },
   },

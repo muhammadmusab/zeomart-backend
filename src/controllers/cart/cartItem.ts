@@ -48,17 +48,17 @@ export const CreateUpdate = async (
     });
 
     // if product has variant then it requires FE to send product sku unique id
-    if (product?.multipart && !productSkuUniqueId) {
+    if (product?.hasVariants && !productSkuUniqueId) {
       return res.status(403).send({
         message: "productSkuUniqueId required",
       });
     }
 
     // calculating subtotal
-    if (product?.multipart && productSku) {
+    if (product?.hasVariants && productSku) {
       subTotal = productSku?.currentPrice * quantity;
     } else {
-      subTotal = (product?.basePrice as number) * quantity;
+      subTotal = (product?.currentPrice as number) * quantity;
     }
 
     // Assuming cart is already created
@@ -155,7 +155,7 @@ export const CreateUpdate = async (
       data,
     });
   } catch (error: any) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -228,7 +228,7 @@ export const Delete = async (
     });
   } catch (error:any) {
     console.log(error.message)
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 
@@ -265,6 +265,6 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     } });
   } catch (error: any) {
     console.log(error.message);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };

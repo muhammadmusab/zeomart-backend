@@ -55,11 +55,12 @@ export const getProductVariantSchema = yup.object({
   }),
 });
 export const listProductVariantSchema = yup.object({
-  body: yup.object({
-    productUniqueId: yup.string().uuid().required(), // uid of product
-    productVariantValueUniqueIds: yup.array(yup.string().uuid().required()),
-  }),
-  query: yup.object({
-    separate: yup.boolean(),
-  }),
+  // body: yup.object({
+    // product: yup.string().uuid().required(), // uid of product
+    // productVariantValues: yup.array(yup.string().uuid().required()),
+  // }),
+  filter:yup.string(),
+  // query: yup.object({
+  //   separate: yup.boolean(),
+  // }),
 });

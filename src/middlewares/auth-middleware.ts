@@ -1,4 +1,4 @@
-import { AuthError } from "../utils/api-errors";
+import { AuthError, BadRequestError } from "../utils/api-errors";
 import { verifyDecodedToken } from "../types/general";
 import { UserType } from "../types/model-types";
 import { Request, Response, NextFunction } from "express";
@@ -9,16 +9,18 @@ const jwt = require("jsonwebtoken");
 import fs from "fs";
 import path from "path";
 import { Auth } from "../models/Auth";
+import { Vendor } from "../models/Vendor";
 const jwtAccessPublicKey = fs.readFileSync(
   path.join(__dirname, "../config", "access-token.public.pem"),
   "utf8"
 );
-const authMiddleware = (ignoreExpiration = false) => {
+const authMiddleware = ( type?:UserType,ignoreExpiration = false,) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       let user;
       // getting accessToken from header
       const accessToken = req.header("Authorization")?.replace("Bearer ", "");
+      // console.log('req.cookies',req.cookies)
 
       const { refresh_token } = req.cookies;
 
@@ -39,7 +41,7 @@ const authMiddleware = (ignoreExpiration = false) => {
         issuer: global.PLATFORM_NAME,
         // subject: req.query.user,
         audience: process.env.DOMAIN,
-        expiresIn: "15m",
+        expiresIn: process.env.JWT_ACCESS_EXPIRY,
         algorithms: [process.env.JWT_HASH_ALGORITHM],
         ignoreExpiration: ignoreExpiration,
       };
@@ -51,13 +53,23 @@ const authMiddleware = (ignoreExpiration = false) => {
       );
 
       verifyDecodedToken(decoded, "email");
+      if(!type && req.query.type){
+        type=req.query.type as UserType
+      }
 
       user = await Auth.findOne({
         where: {
           email: decoded.email,
         },
-        include: { model: User },
+        include: [
+          {
+            model: type === UserType.USER ? User : Vendor,
+          },
+        ],
       });
+      if (type && user?.type !== type) {
+        return res.status(403).send({ message: "Invalid User" });
+      }
 
       if (user?.verified) {
         const err = new AuthError();
@@ -65,7 +77,9 @@ const authMiddleware = (ignoreExpiration = false) => {
         err.status = 401;
         return res.status(err.status).send(err.message);
       }
-
+      console.log('decoded.type',decoded.type);
+      console.log('user.type',user?.type);
+      
       if (decoded.type !== user?.type || !user) {
         const err = new AuthError();
         err.message = "Unauthorised";
@@ -80,6 +94,7 @@ const authMiddleware = (ignoreExpiration = false) => {
       req.user = user;
       next();
     } catch (error) {
+      console.log('error------',error)
       res.status(401).send({ message: "Unauthorized" });
     }
   };

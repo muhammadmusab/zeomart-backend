@@ -23,9 +23,11 @@ import {
   verifyEmailAddressSchema,
   deleteAccountSchema,
 } from "../schemas/auth";
+import { uploadMiddleware } from "../middlewares/upload-middleware";
 const router = express.Router();
 
-router.post("/register", validate(registerSchema), register);
+router.post("/register",uploadMiddleware().single('avatar'), validate(registerSchema), register);
+
 router.get(
   "/verify-email",
   validate(verifyEmailAddressSchema),
@@ -45,6 +47,7 @@ router.post(
   deleteAccount
 );
 router.get("/signout", authMiddleware(), signout);
+
 router.post(
   "/reset-password-mail",
   validate(resetPasswordMailSchema),
@@ -58,5 +61,5 @@ router.post(
 );
 router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
 
-router.get("/refresh-token", authMiddleware(true), refreshToken);
+router.get("/refresh-token", authMiddleware(undefined,true), refreshToken);
 export default router;

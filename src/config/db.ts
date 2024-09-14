@@ -20,6 +20,8 @@ export const sequelize = new Sequelize(
   }
 );
 
+
+export const queryInterface = sequelize.getQueryInterface();
 sequelize.addHook("beforeCount", function (this: any, options: any) {
   if (this._scope.include && this._scope.include.length > 0) {
     options.distinct = true;

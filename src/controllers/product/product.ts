@@ -13,6 +13,9 @@ import { Op, QueryTypes } from "sequelize";
 import { sequelize } from "../../config/db";
 import { ProductTypes } from "../../models/ProductType";
 import { ProductVariantType } from "../../models/ProductVariantType";
+import { Vendor } from "../../models/Vendor";
+import { Media } from "../../models/Media";
+import { Brand } from "../../models/Brand";
 
 export const Create = async (
   req: Request,
@@ -23,76 +26,145 @@ export const Create = async (
     const {
       title,
       status,
-      baseQuantity = null,
-      basePrice = null,
-      oldPrice = null,
-      sku = null, //model number (following noon.com)
+      skus = null,
       brand, //brand
-      categoryUniqueId,
+      category,
       overview,
       highlights,
-      specifications,
+      features, //features
+      media,
+      // if product has no variant
+      currentPrice,
+      oldPrice,
+      quantity,
+      sku,
     } = req.body;
 
+    let vendor = await Vendor.scope("withId").findOne({
+      where: {
+        uuid: req.user.Vendor?.uuid,
+      },
+    });
     const body: {
       title: string;
       status?: string;
-      baseQuantity?: number;
-      basePrice?: number;
+      quantity?: number;
+      currentPrice?: number;
       oldPrice?: number;
       sku?: string;
       slug: string;
-      brand: string;
+      BrandId?: number;
       CategoryId?: number | null;
       overview: string;
-      highlights: string[];
-      multipart: any;
-      specifications: Record<string, any>[];
+      highlights: string;
+      hasVariants: any;
+      features: Record<string, any>[];
+      VendorId: number;
     } = {
-      specifications,
+      features,
       highlights,
       overview,
-      multipart: req.body.multipart === true ? true : false,
-      brand,
+      hasVariants: Boolean(req.body.hasVariants) ? "true" : "false",
       slug: title
         .replaceAll(" ", "-")
         .replaceAll("/", "-")
         .replaceAll(",", "-"),
       title,
+      VendorId: vendor?.id as number,
     };
+
+    // Handle hasVariants =true but no Skus array in body
+    if (req.body.hasVariants && !req.body.skus.length) {
+      const err = new BadRequestError(
+        "Bad Request, Skus not found in the body"
+      );
+      return res.status(err.status).send({ message: err.message });
+    }
+    let _brand;
+    if (brand) {
+      _brand = await Brand.scope("withId").findOne({
+        where: {
+          uuid: brand,
+        },
+        attributes: ["id"],
+      });
+    }
+    if (_brand) {
+      body.BrandId = _brand.id;
+    }
+
     if (status) {
       body["status"] = status;
     }
-    if (!body.multipart) {
-      body.basePrice = basePrice;
-      body.oldPrice = oldPrice;
-      body.baseQuantity = baseQuantity;
-      body.sku = sku;
-    } else if (
-      body.multipart &&
-      (body.basePrice || body.oldPrice || body.baseQuantity || body.sku)
-    ) {
-      return res.status(403).send({
-        message:
-          "You can't set base price and base quantity for product with variant",
-        data: null,
-      });
+    if (!body.hasVariants) {
+      body.currentPrice = currentPrice;
+      if (oldPrice) {
+        body.oldPrice = oldPrice;
+      }
+      body.quantity = quantity;
+      if (sku) {
+        body.sku = sku;
+      }
     }
 
-    const category = await Category.scope("withId").findOne({
+    const _category = await Category.scope("withId").findOne({
       where: {
-        uuid: categoryUniqueId,
+        uuid: category,
       },
       attributes: {
         include: ["id"],
       },
     });
 
-    if (category?.id) {
+    if (_category?.id) {
       //@ts-ignore
-      body.CategoryId = category.id as string;
+      body.CategoryId = _category.id as string;
     }
+
     const product = await Product.create({ ...body });
+
+    media?.map(async (item: any) => {
+      await Media.create({
+        url: item?.url,
+        width: item?.width,
+        height: item?.height,
+        size: item?.size,
+        mime: item?.mime,
+        name: item?.name,
+        mediaableType: "Product",
+        mediaableId: product?.id,
+      });
+    });
+
+    if (body.hasVariants) {
+      skus.map(async (item: any) => {
+        let mediaArray = item.media;
+        let payload = {
+          ...item,
+          ProductId: product.id,
+        };
+        delete payload.media;
+        console.log("product sku payload", payload);
+
+        let productSku = await ProductSkus.create(payload);
+        console.log(mediaArray);
+
+        mediaArray.map(async (mediaObj: any) => {
+          let imagePayload = {
+            url: mediaObj?.url,
+            width: mediaObj?.width,
+            height: mediaObj?.height,
+            size: mediaObj?.size,
+            mime: mediaObj?.mime,
+            name: mediaObj?.name,
+            mediaableType: "ProductSku",
+            mediaableId: productSku.dataValues.id,
+          };
+          await Media.create(imagePayload);
+        });
+      });
+      // await ProductSkus.bulkCreate(productSkus);
+    }
 
     const { data } = getData(product);
 
@@ -101,8 +173,7 @@ export const Create = async (
       data: { ...data },
     });
   } catch (error: any) {
-    console.log(error);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Update = async (
@@ -112,6 +183,19 @@ export const Update = async (
 ) => {
   try {
     const { uid } = req.params;
+    const validUpdates = [
+      "skus",
+      "title",
+      "status",
+      "brand",
+      "category",
+      "overview",
+      "highlights",
+      "currentPrice",
+      "oldPrice",
+      "quantity",
+    ];
+    const validBody = getValidUpdates(validUpdates, req.body);
     const product = await Product.findOne({
       where: {
         uuid: uid,
@@ -122,42 +206,50 @@ export const Update = async (
         message: "Product Not Found",
         data: null,
       });
-    } else if (
-      product.multipart &&
-      (req.body.basePrice ||
-        req.body.oldPrice ||
-        req.body.baseQuantity ||
-        req.body.sku)
-    ) {
-      return res.status(403).send({
-        message:
-          "You can't set base price and base quantity for product with variant",
-        data: null,
-      });
     }
-    const validUpdates = [
-      "title",
-      "status",
-      "baseQuantity",
-      "basePrice",
-      "oldPrice",
-      "sku",
-      "brand",
-      "categoryUniqueId",
-      "overview",
-      "highlights",
-    ];
-    const validBody = getValidUpdates(validUpdates, req.body);
 
     // if we want to change the parent of the current category
-    if (req.body.categoryUniqueId) {
+    if (req.body.category) {
       const category = await Category.scope("withId").findOne({
         where: {
-          uuid: req.body.categoryUniqueId,
+          uuid: req.body.category,
         },
         include: ["id"],
       });
       validBody.CategoryId = category?.id;
+    }
+
+    if (product.hasVariants) {
+      validBody.skus.map(async (item: any) => {
+        const productSku = await ProductSkus.findOne({
+          where: {
+            uuid: item.uuid,
+          },
+        });
+        if (productSku) {
+          productSku.sku = item.sku;
+          productSku.oldPrice = item.oldPrice;
+          productSku.currentPrice = item.currentPrice;
+          productSku.quantity = item.quantity;
+          await productSku.save();
+        }
+      });
+    } else {
+      delete validBody.skus;
+    }
+    if (validBody.brand) {
+      let _brand = await Brand.scope("withId").findOne({
+        where: {
+          uuid: validBody.brand,
+        },
+        attributes: ["id"],
+      });
+
+      if (_brand) {
+        delete validBody.brand;
+
+        validBody.BrandId = _brand.id;
+      }
     }
     const result = await Product.update(
       { ...validBody },
@@ -174,7 +266,7 @@ export const Update = async (
     }
     res.send({ message: "Success", data: result });
   } catch (error) {
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 export const Delete = async (
@@ -202,41 +294,44 @@ export const Delete = async (
 };
 export const Get = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { productUniqueId, productVariantValueUniqueIds } = req.body;
+    const { uid } = req.params;
+    // @ts-expect-error
+    const { productVariantValues } = req.filter;
 
-    let product = await Product.scope("withId").findOne({
+    let _product = await Product.scope("withId").findOne({
       where: {
-        uuid: productUniqueId,
-      }
+        uuid: uid,
+      },
     });
-    if (product && product?.multipart === false) {
-     delete product.dataValues.id
-     delete product.dataValues.CategoryId
-      return res.send({ message: "Success", data: product });
+    if (_product && _product?.hasVariants === false) {
+      delete _product.dataValues.id;
+      delete _product.dataValues.CategoryId;
+      return res.send({ message: "Success", data: _product });
     }
 
     const query = `
-              SELECT pt."type" as "type",  array_agg(json_build_object('productVariantValueUniqueId',pvv.uuid,'value',pvv."value")) as "ProductVariants"
+              SELECT pt."type" as "type",  array_agg(json_build_object('productVariantValueUniqueId',pvv.uuid,'value',o."value")) as "ProductVariants"
               FROM "ProductVariantTypes" as pvt
                   JOIN "ProductVariantValues" as pvv ON pvv."ProductVariantTypeId" = pvt."id"
                   JOIN "ProductTypes" as pt ON pvt."ProductTypeId" = pt."id"
-              WHERE pvt."ProductId"=${product?.id}
+                  JOIN "Options" as o ON ppv."OptionId" = o."id"
+              WHERE pvt."ProductId"=${_product?.id}
               GROUP BY pvt."ProductTypeId",pt."type";
               `;
 
     const [productVariantsWithTypes] = await sequelize.query(query, {
       type: QueryTypes.RAW,
     });
-    let productVariantValue = null;
+    let _productVariantValue = null;
     let productVariantValueIds = null;
-    if (productVariantValueUniqueIds) {
-      productVariantValue = await ProductVariantValues.findAll({
+    if (productVariantValues) {
+      _productVariantValue = await ProductVariantValues.findAll({
         where: {
-          uuid: productVariantValueUniqueIds,
+          uuid: productVariantValues,
         },
         attributes: ["id"],
       });
-      productVariantValueIds = productVariantValue.map(
+      productVariantValueIds = _productVariantValue.map(
         (item) => item.dataValues.id
       );
     }
@@ -247,8 +342,8 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
     } = {};
 
     if (
-      productVariantValueUniqueIds &&
-      productVariantValueUniqueIds.length &&
+      productVariantValues &&
+      productVariantValues.length &&
       productVariantValueIds &&
       productVariantValueIds.length
     ) {
@@ -277,9 +372,9 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
       ],
     });
 
-    product = await Product.scope("withId").findOne({
+    _product = await Product.scope("withId").findOne({
       where: {
-        uuid: productUniqueId,
+        uuid: uid,
       },
       include: [
         {
@@ -317,18 +412,18 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
       ],
     });
 
-    if (!product) {
+    if (!_product) {
       const err = new BadRequestError("Data Not Found");
       res.status(err.status).send({ message: err.message });
       return;
     }
 
-    const { data } = getData(product);
+    const { data } = getData(_product);
     if (data?.uuid) {
       res.send({
         message: "Success",
         data: {
-          product,
+          product: _product,
           ...productSku?.dataValues,
           variantsList: productVariantsWithTypes,
         },
@@ -345,33 +440,55 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
 export const List = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { limit, offset } = getPaginated(req.query);
+
     // sortBy
     const sortBy = req.query.sortBy ? req.query.sortBy : "createdAt";
     const sortAs = req.query.sortAs ? (req.query.sortAs as string) : "DESC";
+    let _category;
+    if (req.query.category) {
+      _category = await Category.scope("withId").findOne({
+        where: {
+          uuid: req.query?.category as string,
+        },
+      });
+    }
 
-    const category = await Category.scope("withId").findOne({
-      where: {
-        uuid: req.query.categoryUniqueId as string,
-      },
-    });
+    let _vendor;
+    if (req.query.vendor) {
+      _vendor = await Vendor.scope("withId").findOne({
+        where: {
+          uuid: req.query.vendor as string,
+        },
+      });
+    }
+
+    const where: { CategoryId?: number; VendorId?: number } = {};
+    if (_category?.id) {
+      where.CategoryId = _category.id;
+    }
+    if (_vendor?.id) {
+      where.VendorId = _vendor.id;
+    }
 
     const { count: total, rows: products } = await Product.findAndCountAll({
-      where: {
-        CategoryId: category?.id,
-      },
+      where,
       include: [
+        {
+          model: Media,
+          as: "media",
+        },
         {
           model: Category,
           attributes: {
             exclude: ["id", "parentId"],
           },
         },
-
         {
           model: SkuVariations,
           where: {
             setAsDefault: true,
           },
+          required: false,
           attributes: {
             exclude: [
               "id",
@@ -384,16 +501,17 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
           include: [
             {
               model: ProductSkus,
+              required: false,
+              include: [
+                {
+                  model: Media,
+                  as: "media",
+                },
+              ],
             },
 
             {
               model: ProductVariantValues,
-
-              include: [
-                {
-                  model: ProductImage,
-                },
-              ],
             },
           ],
         },
@@ -406,7 +524,7 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     res.send({ message: "Success", data: products, total });
   } catch (error: any) {
     console.log(error.message);
-    res.status(500).send({ message: error });
+    next(error);
   }
 };
 

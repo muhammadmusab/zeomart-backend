@@ -1,32 +1,17 @@
 import express from "express";
-import basicAuthMiddleware from "../../middlewares/basic-auth-middleware";
-import {
-  createProductImageSchema,
-  deleteProductImageSchema,
-  listProductImageSchema,
-} from "../../schemas/product/productImage";
-import { Create, List, Delete } from "../../controllers/product/productImage";
-import { validate } from "../../middlewares/validate-middleware";
+
 import { uploadMiddleware } from '../../middlewares/upload-middleware';
+import authMiddleware from "../../middlewares/auth-middleware";
+import { UserType } from "../../types/model-types";
 const router = express.Router();
+import { Upload } from "../../utils/upload-function";
+
 router.post(
-  "/create",
-  uploadMiddleware().single('productImage'),
-  validate(createProductImageSchema),
-  basicAuthMiddleware,
-  Create
+  "/upload",
+  uploadMiddleware().array("media", 5),
+  // validate(createProductImageSchema),
+  authMiddleware(UserType.VENDOR),
+  Upload()
 );
 
-router.delete(
-  "/delete/:uid",
-  validate(deleteProductImageSchema),
-  basicAuthMiddleware,
-  Delete
-);
-router.get(
-  "/list",
-  validate(listProductImageSchema),
-  basicAuthMiddleware,
-  List
-);
 export default router;
