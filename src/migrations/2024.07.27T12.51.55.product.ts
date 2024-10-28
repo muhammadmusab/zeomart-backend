@@ -56,6 +56,10 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },
+    sold:{
+      type: DataTypes.INTEGER,
+      defaultValue:0
+    },
     CategoryId: {
       type: DataTypes.INTEGER,
       references: {
@@ -70,10 +74,10 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
         key: "id",
       },
     },
-    BrandId: {
+    OptionId: {
       type: DataTypes.INTEGER,
       references: {
-        model: "Brands",
+        model: "Options",
         key: "id",
       },
     },

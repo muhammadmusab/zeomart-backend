@@ -77,8 +77,7 @@ const authMiddleware = ( type?:UserType,ignoreExpiration = false,) => {
         err.status = 401;
         return res.status(err.status).send(err.message);
       }
-      console.log('decoded.type',decoded.type);
-      console.log('user.type',user?.type);
+   
       
       if (decoded.type !== user?.type || !user) {
         const err = new AuthError();

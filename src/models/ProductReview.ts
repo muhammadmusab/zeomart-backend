@@ -17,7 +17,7 @@ interface ProductReviewModel
   name: string;
   title: string;
   body: string;
-  email: string;
+  UserId: number;
   rating: number;
   ProductId?: number | null;
   ProductSkuId?: number | null;
@@ -36,19 +36,19 @@ export const ProductReview = sequelize.define<ProductReviewModel>(
     },
     title: {
       type: DataTypes.STRING,
-      allowNull: false,
     },
     body: {
       type: DataTypes.TEXT,
       allowNull: false,
     },
-    email: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      // unique: true,
-      validate: {
-        isEmail: true,
+    
+    UserId: {
+      type: DataTypes.INTEGER,
+      references: {
+        model: "ProductReview",
+        key: "id",
       },
+      allowNull: false,
     },
     rating: {
       type: DataTypes.DECIMAL(2, 1),
@@ -72,7 +72,7 @@ export const ProductReview = sequelize.define<ProductReviewModel>(
   {
     freezeTableName: true,
     defaultScope: {
-      attributes: { exclude: ["id", "ProductId","ProductSkuId"] },
+      attributes: { exclude: [] },
     },
     scopes: {
       withId: {

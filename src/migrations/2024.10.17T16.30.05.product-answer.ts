@@ -2,7 +2,7 @@ import type { Migration } from '../umguz';
 import { DataTypes, Sequelize, UUIDV4 } from 'sequelize';
 
 export const up: Migration = async ({ context }: { context: Sequelize }) => {
-  await context.getQueryInterface().createTable('Options', {
+  await context.getQueryInterface().createTable('ProductAnswer', {
     id: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -14,17 +14,17 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
       defaultValue: UUIDV4,
       unique: true,
     },
-    value:{
-      type:DataTypes.STRING,
-      unique:true,
-    },
-    AttributeId: {
-      type: DataTypes.INTEGER,
+    answer: {
+      type: DataTypes.TEXT,
       allowNull: false,
+    },
+    ProductId: {
+      type: DataTypes.INTEGER,
       references: {
-        model: "Attributes",
+        model: "Products",
         key: "id",
       },
+      allowNull: false,
     },
     createdAt: {
       type: DataTypes.DATE,
@@ -36,5 +36,5 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
 };
 
 export const down: Migration = async ({ context }: { context: Sequelize }) => {
-  await context.getQueryInterface().dropTable('Options');
+  await context.getQueryInterface().dropTable('ProductAnswer');
 };

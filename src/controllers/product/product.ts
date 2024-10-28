@@ -2,6 +2,7 @@ import { Category } from "../../models/Category";
 import { Product } from "../../models/Product";
 import { Request, Response, NextFunction } from "express";
 import { BadRequestError } from "../../utils/api-errors";
+
 import { getValidUpdates } from "../../utils/validate-updates";
 import { getPaginated } from "../../utils/paginate";
 
@@ -9,13 +10,14 @@ import { ProductSkus } from "../../models/ProductSku";
 import { ProductImage } from "../../models/ProductImage";
 import { SkuVariations } from "../../models/SkuVariation";
 import { ProductVariantValues } from "../../models/ProductVariantValue";
-import { Op, QueryTypes } from "sequelize";
+import { Op, QueryTypes, where } from "sequelize";
 import { sequelize } from "../../config/db";
-import { ProductTypes } from "../../models/ProductType";
-import { ProductVariantType } from "../../models/ProductVariantType";
 import { Vendor } from "../../models/Vendor";
 import { Media } from "../../models/Media";
-import { Brand } from "../../models/Brand";
+import { Option } from "../../models/Options";
+import { Attribute } from "../../models/Attribute";
+import { ProductReview } from "../../models/ProductReview";
+import { UnprocessableError } from "../../utils/api-errors/unprocessable-content";
 
 export const Create = async (
   req: Request,
@@ -25,7 +27,7 @@ export const Create = async (
   try {
     const {
       title,
-      status,
+      status = "NEW",
       skus = null,
       brand, //brand
       category,
@@ -40,131 +42,143 @@ export const Create = async (
       sku,
     } = req.body;
 
-    let vendor = await Vendor.scope("withId").findOne({
-      where: {
-        uuid: req.user.Vendor?.uuid,
-      },
-    });
-    const body: {
-      title: string;
-      status?: string;
-      quantity?: number;
-      currentPrice?: number;
-      oldPrice?: number;
-      sku?: string;
-      slug: string;
-      BrandId?: number;
-      CategoryId?: number | null;
-      overview: string;
-      highlights: string;
-      hasVariants: any;
-      features: Record<string, any>[];
-      VendorId: number;
-    } = {
-      features,
-      highlights,
-      overview,
-      hasVariants: Boolean(req.body.hasVariants) ? "true" : "false",
-      slug: title
-        .replaceAll(" ", "-")
-        .replaceAll("/", "-")
-        .replaceAll(",", "-"),
-      title,
-      VendorId: vendor?.id as number,
-    };
-
-    // Handle hasVariants =true but no Skus array in body
-    if (req.body.hasVariants && !req.body.skus.length) {
-      const err = new BadRequestError(
-        "Bad Request, Skus not found in the body"
-      );
-      return res.status(err.status).send({ message: err.message });
-    }
-    let _brand;
-    if (brand) {
-      _brand = await Brand.scope("withId").findOne({
+    const product = await sequelize.transaction(async (t) => {
+      let vendor = await Vendor.scope("withId").findOne({
         where: {
-          uuid: brand,
+          uuid: req.user.Vendor?.uuid,
         },
-        attributes: ["id"],
       });
-    }
-    if (_brand) {
-      body.BrandId = _brand.id;
-    }
+      const body: {
+        title: string;
+        status?: string;
+        quantity?: number;
+        currentPrice?: number;
+        oldPrice?: number;
+        sku?: string;
+        slug: string;
+        OptionId?: number;
+        CategoryId?: number | null;
+        overview: string;
+        highlights: string;
+        hasVariants: any;
+        features: Record<string, any>[];
+        VendorId: number;
+      } = {
+        features,
+        highlights,
+        overview,
+        hasVariants: Boolean(req.body.hasVariants) ? "true" : "false",
+        slug: title
+          .replaceAll(" ", "-")
+          .replaceAll("/", "-")
+          .replaceAll(",", "-"),
+        title,
+        VendorId: vendor?.id as number,
+      };
 
-    if (status) {
-      body["status"] = status;
-    }
-    if (!body.hasVariants) {
-      body.currentPrice = currentPrice;
-      if (oldPrice) {
-        body.oldPrice = oldPrice;
+      // Handle hasVariants =true but no Skus array in body
+      if (req.body.hasVariants && !req.body.skus.length) {
+        const err = new BadRequestError(
+          "Bad Request, Skus not found in the body"
+        );
+        return res.status(err.status).send({ message: err.message });
       }
-      body.quantity = quantity;
-      if (sku) {
-        body.sku = sku;
+      let _brand;
+      if (brand) {
+        _brand = await Option.findOne({
+          where: {
+            uuid: brand,
+          },
+          attributes: ["id"],
+        });
       }
-    }
+      if (_brand) {
+        body.OptionId = _brand.id;
+      }
 
-    const _category = await Category.scope("withId").findOne({
-      where: {
-        uuid: category,
-      },
-      attributes: {
-        include: ["id"],
-      },
-    });
+      if (status) {
+        body["status"] = status;
+      }
+      if (body.hasVariants === "false") {
+        body.currentPrice = currentPrice;
+        if (oldPrice) {
+          body.oldPrice = oldPrice;
+        }
+        body.quantity = quantity;
+        if (sku) {
+          body.sku = sku;
+        }
+      }
 
-    if (_category?.id) {
-      //@ts-ignore
-      body.CategoryId = _category.id as string;
-    }
-
-    const product = await Product.create({ ...body });
-
-    media?.map(async (item: any) => {
-      await Media.create({
-        url: item?.url,
-        width: item?.width,
-        height: item?.height,
-        size: item?.size,
-        mime: item?.mime,
-        name: item?.name,
-        mediaableType: "Product",
-        mediaableId: product?.id,
+      const _category = await Category.scope("withId").findOne({
+        where: {
+          uuid: category,
+        },
+        attributes: {
+          include: ["id"],
+        },
       });
-    });
 
-    if (body.hasVariants) {
-      skus.map(async (item: any) => {
-        let mediaArray = item.media;
-        let payload = {
-          ...item,
-          ProductId: product.id,
-        };
-        delete payload.media;
-        console.log("product sku payload", payload);
+      if (_category?.id) {
+        //@ts-ignore
+        body.CategoryId = _category.id as string;
+      }
 
-        let productSku = await ProductSkus.create(payload);
-        console.log(mediaArray);
+      const product = await Product.create({ ...body });
 
-        mediaArray.map(async (mediaObj: any) => {
-          let imagePayload = {
-            url: mediaObj?.url,
-            width: mediaObj?.width,
-            height: mediaObj?.height,
-            size: mediaObj?.size,
-            mime: mediaObj?.mime,
-            name: mediaObj?.name,
-            mediaableType: "ProductSku",
-            mediaableId: productSku.dataValues.id,
-          };
-          await Media.create(imagePayload);
+      media?.map(async (item: any) => {
+        await Media.create({
+          url: item?.url,
+          width: item?.width,
+          height: item?.height,
+          size: item?.size,
+          mime: item?.mime,
+          name: item?.name,
+          mediaableType: "Product",
+          mediaableId: product?.id,
         });
       });
-      // await ProductSkus.bulkCreate(productSkus);
-    }
+
+      if (body.hasVariants && skus?.length) {
+        await Promise.all(
+          skus?.map(async (item: any) => {
+            let mediaArray = item.media;
+            let payload = {
+              ...item,
+              ProductId: product.id,
+            };
+            delete payload.media;
+            const _productSku = await ProductSkus.findOne({
+              where: {
+                sku: payload.sku,
+                ProductId: product.id,
+              },
+            });
+            if (_productSku) {
+              const error = new UnprocessableError("Sku already found");
+              return next(error);
+            }
+            let productSku = await ProductSkus.create(payload);
+            await Promise.all(
+              mediaArray.map(async (mediaObj: any) => {
+                let imagePayload = {
+                  url: mediaObj?.url,
+                  width: mediaObj?.width,
+                  height: mediaObj?.height,
+                  size: mediaObj?.size,
+                  mime: mediaObj?.mime,
+                  name: mediaObj?.name,
+                  mediaableType: "ProductSku",
+                  mediaableId: productSku.dataValues.id,
+                };
+                await Media.create(imagePayload);
+              })
+            );
+          })
+        );
+      }
+      return product;
+    });
 
     const { data } = getData(product);
 
@@ -184,6 +198,7 @@ export const Update = async (
   try {
     const { uid } = req.params;
     const validUpdates = [
+      "sku",
       "skus",
       "title",
       "status",
@@ -194,71 +209,162 @@ export const Update = async (
       "currentPrice",
       "oldPrice",
       "quantity",
+      "media",
+      "deletedMedia",
     ];
-    const validBody = getValidUpdates(validUpdates, req.body);
-    const product = await Product.findOne({
-      where: {
-        uuid: uid,
-      },
-    });
-    if (!product) {
-      return res.status(404).send({
-        message: "Product Not Found",
-        data: null,
-      });
-    }
+    const validBody: Record<string, any> = getValidUpdates(
+      validUpdates,
+      req.body
+    );
 
-    // if we want to change the parent of the current category
-    if (req.body.category) {
-      const category = await Category.scope("withId").findOne({
-        where: {
-          uuid: req.body.category,
-        },
-        include: ["id"],
-      });
-      validBody.CategoryId = category?.id;
-    }
-
-    if (product.hasVariants) {
-      validBody.skus.map(async (item: any) => {
-        const productSku = await ProductSkus.findOne({
-          where: {
-            uuid: item.uuid,
-          },
-        });
-        if (productSku) {
-          productSku.sku = item.sku;
-          productSku.oldPrice = item.oldPrice;
-          productSku.currentPrice = item.currentPrice;
-          productSku.quantity = item.quantity;
-          await productSku.save();
-        }
-      });
-    } else {
-      delete validBody.skus;
-    }
-    if (validBody.brand) {
-      let _brand = await Brand.scope("withId").findOne({
-        where: {
-          uuid: validBody.brand,
-        },
-        attributes: ["id"],
-      });
-
-      if (_brand) {
-        delete validBody.brand;
-
-        validBody.BrandId = _brand.id;
-      }
-    }
-    const result = await Product.update(
-      { ...validBody },
-      {
+    const result: any = await sequelize.transaction(async (t) => {
+      const _product = await Product.scope("withId").findOne({
         where: {
           uuid: uid,
         },
+      });
+      if (!_product) {
+        return res.status(404).send({
+          message: "Product Not Found",
+          data: null,
+        });
       }
-    );
+      if (validBody?.deletedMedia?.length) {
+        await Promise.all(
+          validBody?.deletedMedia?.map(async (uuid: string) => {
+            await Media.destroy({ where: { uuid: uuid } });
+          })
+        );
+      }
+      if (validBody?.media?.length) {
+        const ProductId = _product.id;
+        await Promise.all(
+          validBody?.media.map(async (item: any) => {
+            if (!item.uuid) {
+              let imagePayload = {
+                url: item?.url,
+                width: item?.width,
+                height: item?.height,
+                size: item?.size,
+                mime: item?.mime,
+                name: item?.name,
+                mediaableType: "Product",
+                mediaableId: ProductId,
+              };
+              await Media.create(imagePayload);
+            }
+          })
+        );
+      }
+
+      // if we want to change the parent of the current category
+      if (req.body.category) {
+        const category = await Category.scope("withId").findOne({
+          where: {
+            uuid: req.body.category,
+          },
+          attributes: ["id"],
+        });
+        validBody.CategoryId = category?.id;
+      }
+
+      if (_product.hasVariants) {
+        if (validBody?.skus?.length) {
+          await Promise.all(
+            validBody?.skus?.map(async (item: any) => {
+              let _productSkuId: any;
+              if (item.uuid) {
+                const _productSku = await ProductSkus.findOne({
+                  where: {
+                    uuid: item.uuid,
+                  },
+                });
+                if (_productSku) {
+                  _productSkuId = _productSku.id;
+                  _productSku.sku = item.sku;
+                  _productSku.oldPrice = item.oldPrice;
+                  _productSku.currentPrice = item.currentPrice;
+                  _productSku.quantity = item.quantity;
+                  await _productSku.save();
+                }
+              } else {
+                const _foundProductSku = await ProductSkus.findOne({
+                  where: {
+                    sku: item.sku,
+                    ProductId: _product.id,
+                  },
+                });
+                if (_foundProductSku) {
+                  const error = new UnprocessableError("Sku already found");
+                  return next(error);
+                }
+                const _productSku = await ProductSkus.create({
+                  sku: item.sku,
+                  oldPrice: item.oldPrice,
+                  currentPrice: item.currentPrice,
+                  quantity: item.quantity,
+                  ProductId: _product.id,
+                });
+                _productSkuId = _productSku.dataValues.id;
+              }
+              if (item?.deletedMedia?.length) {
+                await Promise.all(
+                  item?.deletedMedia.map(async (uuid: string) => {
+                    await Media.destroy({ where: { uuid: uuid } });
+                  })
+                );
+              }
+              if (item?.media?.length) {
+                await Promise.all(
+                  item?.media.map(async (mediaObj: any) => {
+                    console.log(_productSkuId);
+                    if (!mediaObj.uuid) {
+                      let imagePayload = {
+                        url: mediaObj?.url,
+                        width: mediaObj?.width,
+                        height: mediaObj?.height,
+                        size: mediaObj?.size,
+                        mime: mediaObj?.mime,
+                        name: mediaObj?.name,
+                        mediaableType: "ProductSku",
+                        mediaableId: _productSkuId,
+                      };
+                      await Media.create(imagePayload);
+                    }
+                  })
+                );
+              }
+            })
+          );
+        }
+      } else {
+        delete validBody.skus;
+      }
+      if (validBody?.brand) {
+        let _brand = await Option.findOne({
+          where: {
+            uuid: validBody.brand,
+          },
+          attributes: ["id"],
+        });
+
+        if (_brand) {
+          delete validBody.brand;
+
+          validBody.OptionId = _brand.id;
+        }
+      }
+      const result = await Product.update(
+        { ...validBody },
+        {
+          where: {
+            uuid: uid,
+          },
+        }
+      );
+      return result;
+    });
+
     if (!result[0]) {
       const err = new BadRequestError("Could not update the product data");
       res.status(err.status).send({ message: err.message });
@@ -277,12 +383,31 @@ export const Delete = async (
   try {
     const { uid } = req.params;
 
-    const result = await Product.destroy({
+    const _product = await Product.scope("withId").findOne({
       where: {
         uuid: uid,
       },
     });
-    if (result === 1) {
+    if (_product) {
+      await Media.destroy({
+        where: {
+          mediaableId: _product.id,
+          mediaableType: "Product",
+        },
+      });
+      await ProductSkus.destroy({
+        where: {
+          ProductId: _product.id,
+        },
+      });
+
+      await SkuVariations.destroy({
+        where: {
+          ProductId: _product.id,
+        },
+      });
+      await _product.destroy();
+
       res.send({ message: "Success" });
     } else {
       const err = new BadRequestError("Bad Request");
@@ -302,91 +427,249 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
       where: {
         uuid: uid,
       },
-    });
-    if (_product && _product?.hasVariants === false) {
-      delete _product.dataValues.id;
-      delete _product.dataValues.CategoryId;
-      return res.send({ message: "Success", data: _product });
-    }
-
-    const query = `
-              SELECT pt."type" as "type",  array_agg(json_build_object('productVariantValueUniqueId',pvv.uuid,'value',o."value")) as "ProductVariants"
-              FROM "ProductVariantTypes" as pvt
-                  JOIN "ProductVariantValues" as pvv ON pvv."ProductVariantTypeId" = pvt."id"
-                  JOIN "ProductTypes" as pt ON pvt."ProductTypeId" = pt."id"
-                  JOIN "Options" as o ON ppv."OptionId" = o."id"
-              WHERE pvt."ProductId"=${_product?.id}
-              GROUP BY pvt."ProductTypeId",pt."type";
-              `;
-
-    const [productVariantsWithTypes] = await sequelize.query(query, {
-      type: QueryTypes.RAW,
-    });
-    let _productVariantValue = null;
-    let productVariantValueIds = null;
-    if (productVariantValues) {
-      _productVariantValue = await ProductVariantValues.findAll({
-        where: {
-          uuid: productVariantValues,
-        },
-        attributes: ["id"],
-      });
-      productVariantValueIds = _productVariantValue.map(
-        (item) => item.dataValues.id
-      );
-    }
-
-    let where: {
-      combinationIds?: number[];
-      setAsDefault?: boolean;
-    } = {};
-
-    if (
-      productVariantValues &&
-      productVariantValues.length &&
-      productVariantValueIds &&
-      productVariantValueIds.length
-    ) {
-      where.combinationIds = productVariantValueIds as number[];
-    } else {
-      where.setAsDefault = true;
-    }
-
-    // finding sku for this product
-
-    const productSku = await SkuVariations.findOne({
-      where,
       attributes: {
-        exclude: [
-          "combinationIds",
-          "uuid",
-          "setAsDefault",
-          "createdAt",
-          "updatedAt",
-        ],
+        exclude: ["VendorId", "OptionId"],
       },
       include: [
         {
-          model: ProductSkus,
+          model: Media,
+          as: "media",
+        },
+        {
+          model: Category,
+          as: "category",
+          attributes: {
+            exclude: ["id", "parentId"],
+          },
         },
       ],
     });
+    const ProductId = _product?.id;
+    let _productSku = null;
+    let data: any = {};
+    if (productVariantValues) {
+      let ids = Object.values(productVariantValues);
+      const _productVariantValues = await ProductVariantValues.findAll({
+        where: {
+          uuid: ids as string[],
+        },
+        attributes: {
+          include: ["id"],
+        },
+      });
+      let productVariantValuesIds = _productVariantValues.map(
+        (item) => item.id
+      );
+      console.log(productVariantValuesIds);
+      _productSku = await SkuVariations.findAll({
+        where: {
+          combinationIds: {
+            [Op.contains]: productVariantValuesIds as number[],
+          },
+        },
+        attributes: {
+          include: ["ProductSkuId"],
+        },
+      });
+      _productSku = _productSku.map((item) => item.ProductSkuId);
+      _productSku = [...new Set(_productSku)];
+      _productSku = {
+        id: _productSku[0],
+      };
+      console.log("product sku ------obj", _productSku);
+    } else {
+      _productSku = await ProductSkus.findOne({
+        where: {
+          ProductId: ProductId,
+          isDefault: true,
+        },
+      });
+    }
 
-    _product = await Product.scope("withId").findOne({
+    let productWhere = `p."uuid"='${uid}'`;
+    let having = ``;
+    let productSkuWhere = `ps."ProductId"='${ProductId}'`;
+    if (_productSku) {
+      productSkuWhere += ` AND ps."id"='${_productSku.id}'`;
+    }
+    let reviewWhere=`WHERE "ProductId"=${ProductId}`
+    
+    if(_productSku){
+      reviewWhere+=` AND "ProductSkuId"=${_productSku.id}`
+    }
+    const productReviewQuery=`Select json_build_object(
+    'total',COUNT(DISTINCT pr."id"),
+    'average', COALESCE(ROUND(CAST(AVG(pr."rating") AS NUMERIC), 1), 0)
+    ) as "rating" from "ProductReview" as pr
+     ${reviewWhere}
+    `
+    const productQuery = `
+    SELECT p."uuid",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."hasVariants",p."createdAt",
+     json_build_object('title',c."title",'slug',c."slug") as "category"
+    FROM public."Products" as p
+      LEFT JOIN "Categories" as c ON p."CategoryId" = c."id"
+    WHERE ${productWhere}
+    GROUP BY p."uuid",p."hasVariants",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",c."title",c."slug"`;
+
+    console.log('productQuery------',productQuery)
+
+    const productMediaQuery = `
+    SELECT  pm."uuid","url","width","height","size","mime","name" from "Media" as pm
+   JOIN "Products" as p ON pm."mediaableId" = p."id"
+   WHERE ${productWhere} AND pm."mediaableType"='Product' AND  pm."mediaableId" = p."id";`;
+
+    const [productMediaData] = await sequelize.query(productMediaQuery, {
+      type: QueryTypes.RAW,
+    });
+    const [productData] = await sequelize.query(productQuery, {
+      type: QueryTypes.RAW,
+    });
+    const [productReviewData] = await sequelize.query(productReviewQuery, {
+      type: QueryTypes.RAW,
+    });
+
+    if (_product && Boolean(_product?.hasVariants)) {
+      let productSkuQuery = `
+      SELECT json_build_object('uuid', ps."uuid",'isDefault',ps."isDefault",'sku', ps."sku",'oldPrice',ps."oldPrice",'currentPrice',ps."currentPrice",'quantity',ps."quantity") as "sku",
+      array_agg(
+      json_build_object('productVariantValueUniqueId',pvv."uuid",'option',o."value",'optionUniqueId',o."uuid",'attribute',a."title",'type',a."type",'attributeUniqeId',a."uuid",'skuVariantUniqueId',sv."uuid")) as "selectedOptions",
+      array_agg(
+        DISTINCT jsonb_build_object (
+        'uuid',psm."uuid",'url',psm."url",'width', psm."width",'height', psm."height",'size', psm."size",'mime', psm."mime",'name', psm."name"
+      )) as "media"
+      FROM "SkuVariations" as sv
+          JOIN "ProductSkus" as ps ON sv."ProductSkuId" = ps."id"
+          JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
+          JOIN "Options" as o ON pvv."OptionId" = o."id"
+          JOIN "Attributes" as a ON pvv."AttributeId" = a."id"
+          JOIN "Media" as psm ON psm."mediaableId"=ps."id" AND psm."mediaableType"='ProductSku'
+      WHERE ${productSkuWhere}
+      GROUP BY  ps."uuid",ps."sku",ps."oldPrice",ps."currentPrice",ps."quantity",ps."uuid",ps."isDefault"`;
+
+      // let attributeOptions = `
+      // SELECT json_build_object('uuid', a."uuid",'title',a."title",'type',a."type") as "attribute",
+      //  array_agg(jsonb_build_object('productVariantValueUniqueId', pvv."uuid",
+      //                                       'option', o."value",
+      //                                       'optionUniqueId', o."uuid",
+      //                                       'skuVariationUniqueId', sv."uuid",
+      //                                       'productSkuUniqueId', ps."uuid")) as "options"
+      // FROM "SkuVariations" as sv
+      //     JOIN "ProductSkus" as ps ON sv."ProductSkuId" = ps."id"
+      //     JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
+      //     JOIN "Options" as o ON pvv."OptionId" = o."id"
+      //     JOIN "Attributes" as a ON pvv."AttributeId" = a."id"
+      // WHERE ps."ProductId" = ${ProductId}
+      // GROUP BY a."uuid", a."title", a."type"`;
+
+      let attributeOptions = `
+      SELECT json_build_object('uuid', a."uuid",'title',a."title",'type',a."type") as "attribute",
+       array_agg(
+       json_build_object(
+       'productVariantValueUniqueId', option_data."productVariantValueUniqueId",
+        'option', option_data."option",
+        'optionUniqueId', option_data."optionUniqueId",
+        'skuVariationUniqueId', option_data."skuVariationUniqueId"
+        )) as "options"
+        FROM "Attributes" as a
+        JOIN 
+        (
+          SELECT DISTINCT ON (o."uuid") pvv."uuid" as "productVariantValueUniqueId", 
+                  o."value" as "option", 
+                  o."uuid" as "optionUniqueId", 
+                  sv."uuid" as "skuVariationUniqueId", 
+                  ps."uuid" as "productSkuUniqueId", 
+                  pvv."AttributeId"
+            FROM "SkuVariations" as sv
+            JOIN "ProductSkus" as ps ON sv."ProductSkuId" = ps."id"
+            JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
+            JOIN "Options" as o ON pvv."OptionId" = o."id"
+            WHERE ps."ProductId" = ${ProductId}
+        ) as option_data ON option_data."AttributeId" = a."id"
+        GROUP BY a."uuid", a."title", a."type"`;
+
+      const [productSkuData] = await sequelize.query(productSkuQuery, {
+        type: QueryTypes.RAW,
+      });
+      const [attributeOptionsData] = await sequelize.query(attributeOptions, {
+        type: QueryTypes.RAW,
+      });
+      data = {
+        // @ts-expect-error
+        ...productData[0],
+        // @ts-expect-error
+        ...productReviewData?.[0],
+        media: productMediaData,
+        skus: productSkuData,
+        
+        attributeOption: attributeOptionsData,
+      };
+    } else {
+      data = {
+        // @ts-expect-error
+        ...productData[0],
+       // @ts-expect-error
+       ...productReviewData?.[0],
+        media: productMediaData,
+      };
+    }
+    console.log(JSON.stringify(productData));
+    res.send({
+      message: "Success",
+      data,
+    });
+  } catch (error: any) {
+    console.log("error", error);
+    res.status(500).send({ message: error.message });
+  }
+};
+export const GetAdmin = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    // for ADMIN
+    const { uid } = req.params;
+    const _product = await Product.findOne({
       where: {
         uuid: uid,
       },
       include: [
         {
+          model: Media,
+          as: "media",
+        },
+        {
+          model: ProductSkus,
+          as: "skus",
+          attributes: {
+            exclude: ["id", "ProductId"],
+          },
+
+          include: [
+            {
+              model: Media,
+              as: "media",
+            },
+          ],
+        },
+
+        {
           model: Category,
+          as: "category",
           attributes: {
             exclude: ["id", "parentId"],
           },
         },
-
+        {
+          model: Option,
+          as: "brand",
+          attributes: {
+            exclude: ["id", "AttributeId"],
+          },
+        },
         {
           model: SkuVariations,
-          where: where,
 
           attributes: {
             exclude: [
@@ -400,10 +683,23 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
           include: [
             {
               model: ProductVariantValues,
-
+              attributes: {
+                exclude: ["id", "AttributeId", "OptionId"],
+              },
               include: [
                 {
-                  model: ProductImage,
+                  model: Attribute,
+                  as: "attribute",
+                  attributes: {
+                    exclude: ["id"],
+                  },
+                },
+                {
+                  model: Option,
+                  as: "options",
+                  attributes: {
+                    exclude: ["id", "AttributeId"],
+                  },
                 },
               ],
             },
@@ -411,44 +707,67 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
         },
       ],
     });
-
-    if (!_product) {
-      const err = new BadRequestError("Data Not Found");
-      res.status(err.status).send({ message: err.message });
-      return;
-    }
-
     const { data } = getData(_product);
-    if (data?.uuid) {
-      res.send({
-        message: "Success",
-        data: {
-          product: _product,
-          ...productSku?.dataValues,
-          variantsList: productVariantsWithTypes,
-        },
-      });
-    } else {
-      const err = new BadRequestError("Bad Request");
-      res.status(err.status).send({ message: err.message });
-    }
+    res.send({
+      message: "Success",
+      data,
+    });
   } catch (error: any) {
     console.log(error.message);
     res.status(500).send({ message: error.message });
   }
 };
+export const GetBrand = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    //@ts-expect-error
+    const { title } = req.search;
+
+    let _brand = await Attribute.findOne({
+      where: {
+        title: {
+          [Op.iLike]: `%brand%`,
+        },
+      },
+      attributes: ["uuid", "title"],
+      include: [
+        {
+          model: Option,
+          as: "options",
+          where: {
+            value: {
+              [Op.iLike]: `%${title}%`,
+            },
+          },
+          attributes: {
+            exclude: ["id", "AttributeId"],
+          },
+        },
+      ],
+    });
+    res.send({ message: "Success", data: _brand });
+  } catch (error: any) {
+    console.log(error.message);
+    res.status(500).send({ message: error.message });
+  }
+};
+
 export const List = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { limit, offset } = getPaginated(req.query);
+    // @ts-expect-error
+    const { category, filters } = req.filter;
+    //@ts-expect-error
+    const sort = req.sort;
 
-    // sortBy
-    const sortBy = req.query.sortBy ? req.query.sortBy : "createdAt";
-    const sortAs = req.query.sortAs ? (req.query.sortAs as string) : "DESC";
     let _category;
-    if (req.query.category) {
+    if (category) {
       _category = await Category.scope("withId").findOne({
         where: {
-          uuid: req.query?.category as string,
+          slug: category,
         },
       });
     }
@@ -470,6 +789,223 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
       where.VendorId = _vendor.id;
     }
 
+    let Querywhere = ``;
+    let having = ``;
+    if (_category?.id) {
+      Querywhere = `AND p."CategoryId"=${_category.id}`;
+    }
+
+    let optionIds: number[] = [];
+
+    if (filters) {
+      const attributes = JSON.parse(JSON.stringify(filters));
+      delete attributes?.["Price"];
+      delete attributes?.["Brand"];
+      delete attributes?.["Rating"];
+      if (attributes && Object.values(attributes).length) {
+        let options: any = Object.values(attributes).reduce(
+          (prev: any, currentValue) => prev.concat(currentValue),
+          []
+        );
+        await Promise.all(
+          options.map(async (uuid: string) => {
+            const option = await Option.findOne({
+              where: {
+                uuid,
+              },
+            });
+            if (option?.id) {
+              optionIds.push(option.id);
+            }
+          })
+        );
+
+        let result = await ProductVariantValues.findAll({
+          where: {
+            OptionId: optionIds,
+          },
+        });
+
+        let variantValues: any = result.map((item: any) => item.id);
+
+        variantValues = variantValues.join(",");
+        Querywhere += ` AND pvv."id" IN (${variantValues})`;
+      }
+
+      if (Object.keys(filters).includes("Price")) {
+        const price: string[] = filters.Price;
+        let min = +price?.[0];
+        let max = +price?.[1];
+        if (min && isNaN(min)) {
+          price.shift();
+        }
+        if (max && isNaN(max)) {
+          price.pop();
+        }
+
+        let priceCondition = ``;
+
+        if (price.length < 2) {
+          // price.unshift("1");
+          priceCondition = `>= ${+price[0]}`;
+          // priceCondition = `BETWEEN ${+price[0]} AND ${+price[1]}`;
+        } else {
+          if (min > max) {
+            priceCondition = `BETWEEN ${+price[1]} AND ${+price[0]}`;
+          } else {
+            priceCondition = `BETWEEN ${+price[0]} AND ${+price[1]}`;
+          }
+        }
+
+        Querywhere += ` And ((p."currentPrice" ${priceCondition}) OR ((ps."currentPrice" ${priceCondition}) AND ps."isDefault"))`;
+      }
+      if (Object.keys(filters).includes("Brands")) {
+        const brands = await Promise.all(
+          filters.Brands.map(async (brand: string) => {
+            const option = await Option.findOne({
+              where: {
+                uuid: brand,
+              },
+            });
+            if (option) {
+              return option.id;
+            }
+          })
+        );
+
+        Querywhere += ` And p."OptionId" IN (${brands})`;
+      }
+      if (Object.keys(filters).includes("Rating")) {
+        if (filters.Rating && !isNaN(filters.Rating)) {
+          having = `HAVING AVG(pr."rating") >= ${+filters.Rating}`;
+        }
+      }
+    }
+
+    let orderBY = `ORDER BY `;
+
+    if (sort.length) {
+      sort.map((item: { sortBy: string; sortAs: string }) => {
+        if (item.sortBy == "Price") {
+          orderBY += ` COALESCE(p."currentPrice",ps."currentPrice") ${item.sortAs}`;
+        }
+        if (item.sortBy == "Title") {
+          orderBY += `p."title" ${item.sortAs}`;
+        }
+      });
+    } else {
+      orderBY = "";
+    }
+
+    const query = `
+                SELECT p."uuid",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."hasVariants",p."createdAt",
+                array_agg(
+                DISTINCT jsonb_build_object(
+                'id',pm."id",'url',pm."url",'width',pm."width",'height',pm."height",'size',pm."size",'mime',pm."mime",'name',pm."name") 
+                ) as "media",
+                array_agg(DISTINCT pvv."uuid") as "selectedOptions",
+                json_build_object(
+                'total',COUNT(DISTINCT pr."id"),
+                'average', COALESCE(ROUND(CAST(AVG(pr."rating") AS NUMERIC), 1), 0)
+                ) as "rating",
+                 json_build_object('title',c."title",'slug',c."slug") as "category",
+                 json_build_object('uuid',ps."uuid",'sku',ps."sku",'oldPrice',ps."oldPrice",'currentPrice',ps."currentPrice",'quantity',ps."quantity",'isDefault',ps."isDefault") as "sku"
+                FROM public."Products" as p
+                   LEFT  JOIN "Media" as pm ON pm."mediaableId" = p."id" AND pm."mediaableType"='Product'
+                   LEFT  JOIN "Categories" as c ON p."CategoryId" = c."id"
+                   LEFT  JOIN "ProductSkus" as ps ON ps."ProductId" = p."id"
+                   LEFT  JOIN "SkuVariations" as sv ON sv."ProductId" = p."id"
+                   LEFT  JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
+                   LEFT  JOIN "Options" as o ON pvv."OptionId" = o."id"
+                   LEFT  JOIN "Attributes" as a ON pvv."AttributeId" = a."id"
+                   LEFT  JOIN "ProductReview" as pr ON pr."ProductId" = p."id"
+                WHERE (ps."isDefault" = TRUE OR ps."id" IS NULL) ${Querywhere}
+                GROUP BY p."uuid",p."hasVariants",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",c."title",c."slug",ps."uuid",ps."sku",ps."oldPrice",ps."currentPrice",ps."quantity",ps."uuid",ps."isDefault"
+                ${orderBY}
+                ${having}
+                LIMIT ${limit} OFFSET ${offset}
+                ;
+                `;
+    // const totalQuery = `
+    //            SELECT DISTINCT COUNT(*) over() as "total"
+    //             FROM public."Products" as p
+    //                LEFT  JOIN "Categories" as c ON p."CategoryId" = c."id"
+    //                LEFT  JOIN "ProductSkus" as ps ON ps."ProductId" = p."id"
+    //                LEFT  JOIN "SkuVariations" as sv ON sv."ProductId" = p."id"
+    //                LEFT  JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
+    //                LEFT  JOIN "Options" as o ON pvv."OptionId" = o."id"
+    //                LEFT  JOIN "Attributes" as a ON pvv."AttributeId" = a."id"
+    //             WHERE (ps."isDefault" = TRUE OR ps."id" IS NULL) ${Querywhere}
+    //             GROUP BY p."uuid",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",c."title",c."slug",ps."uuid",ps."sku",ps."oldPrice",ps."currentPrice",ps."quantity",ps."uuid",ps."isDefault";
+    //             `;
+
+    const totalQuery = `SELECT DISTINCT "total" 
+                      FROM (
+                          SELECT 
+                              COUNT(*) OVER() as "total",p."uuid",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",
+                              json_build_object('title', c."title", 'slug', c."slug") as "category",
+                              json_build_object('sku', ps."sku", 'oldPrice', ps."oldPrice", 'currentPrice', ps."currentPrice", 'quantity', ps."quantity", 'isDefault', ps."isDefault") as "sku"
+                          FROM public."Products" as p
+                          LEFT JOIN "Categories" as c ON p."CategoryId" = c."id"
+                          LEFT JOIN "ProductSkus" as ps ON ps."ProductId" = p."id"
+                          LEFT JOIN "SkuVariations" as sv ON sv."ProductId" = p."id"
+                          LEFT JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
+                          LEFT JOIN "ProductReview" as pr ON pr."ProductId" = p."id"
+                          WHERE (ps."isDefault" = TRUE OR ps."id" IS NULL) ${Querywhere}
+                          GROUP BY 
+                              p."uuid", p."title", p."status", p."slug", p."overview", p."highlights", 
+                              p."sku", p."currentPrice", p."oldPrice", p."quantity", p."features", p."sold", 
+                              p."createdAt", c."title", c."slug", ps."uuid", ps."sku", ps."oldPrice", 
+                              ps."currentPrice", ps."quantity", ps."uuid", ps."isDefault"
+                              ${having}
+                      ) as "totalCount";`;
+
+    const [results] = await sequelize.query(query, {
+      type: QueryTypes.RAW,
+    });
+    const [totalResult] = await sequelize.query(totalQuery, {
+      type: QueryTypes.RAW,
+    });
+
+    const total =
+      //@ts-expect-error
+      totalResult.length && totalResult[0].total ? totalResult[0].total : 0;
+    res.send({ message: "Success", data: results, total });
+  } catch (error: any) {
+    console.log(error.message);
+    next(error);
+  }
+};
+export const ListAdmin = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    //@ts-expect-error
+    let sort = req.sort[0];
+    if (!sort) {
+      sort = { sortBy: "createdAt", sortAs: "DESC" };
+      // sort.sortBy = "CreatedAt";
+      // sort.sortAs = "DESC";
+    }
+    const { limit, offset } = getPaginated(req.query);
+
+    let _vendor;
+    if (req.query.vendor) {
+      _vendor = await Vendor.scope("withId").findOne({
+        where: {
+          uuid: req.query.vendor as string,
+        },
+      });
+    }
+
+    const where: { CategoryId?: number; VendorId?: number } = {};
+
+    if (_vendor?.id) {
+      where.VendorId = _vendor.id;
+    }
+
     const { count: total, rows: products } = await Product.findAndCountAll({
       where,
       include: [
@@ -479,15 +1015,14 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
         },
         {
           model: Category,
+          as: "category",
           attributes: {
             exclude: ["id", "parentId"],
           },
         },
         {
           model: SkuVariations,
-          where: {
-            setAsDefault: true,
-          },
+
           required: false,
           attributes: {
             exclude: [
@@ -501,6 +1036,14 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
           include: [
             {
               model: ProductSkus,
+              where: {
+                isDefault: true,
+              },
+              // : {},
+              // as:"ProductSku",
+              attributes: {
+                exclude: ["id", "ProductId"],
+              },
               required: false,
               include: [
                 {
@@ -518,7 +1061,7 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
       ],
       offset: offset,
       limit: limit,
-      order: [[sortBy as string, sortAs]],
+      order: [[sort.sortBy as string, sort.sortAs]],
     });
 
     res.send({ message: "Success", data: products, total });

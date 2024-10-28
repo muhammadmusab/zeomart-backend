@@ -65,7 +65,7 @@ export const Media = sequelize.define<MediaModel>(
   },
   {
     defaultScope: {
-      attributes: { exclude: ["id", "mediaableId"] },
+      attributes: { exclude: [] },
     },
     scopes: {
       withId: {

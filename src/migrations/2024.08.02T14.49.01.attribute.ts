@@ -2,7 +2,7 @@ import type { Migration } from "../umguz";
 import { DataTypes, Sequelize, UUIDV4 } from "sequelize";
 
 export const up: Migration = async ({ context }: { context: Sequelize }) => {
-  await context.getQueryInterface().createTable("ProductVariantTypes", {
+  await context.getQueryInterface().createTable("Attributes", {
     id: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -14,21 +14,23 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
       defaultValue: UUIDV4,
       unique: true,
     },
-    ProductTypeId: {
-      type: DataTypes.INTEGER,
+    title: {
+      // 'ssd' | 'ram' | 'color' | 'size'
+      type: DataTypes.STRING,
       allowNull: false,
-      references: {
-        model: "ProductTypes",
-        key: "id",
+      unique: true,
+      get(this) {
+        const value = this.getDataValue("title").replace("_", " ");
+        return value
+          .split(" ")
+          .map((word: string) => {
+            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+          })
+          .join(" ");
       },
     },
-    ProductId: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      references: {
-        model: "Products",
-        key: "id",
-      },
+    type: {
+      type: DataTypes.STRING,
     },
     createdAt: {
       type: DataTypes.DATE,
@@ -40,5 +42,5 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
 };
 
 export const down: Migration = async ({ context }: { context: Sequelize }) => {
-  await context.getQueryInterface().dropTable("ProductVariantTypes");
+  await context.getQueryInterface().dropTable("Attributes");
 };

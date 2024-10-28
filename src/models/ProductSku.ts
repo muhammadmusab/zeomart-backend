@@ -20,6 +20,7 @@ interface ProductSkusModel
   quantity: number;
   sku: CreationOptional<string>;
   ProductId?: number | null;
+  isDefault?: boolean;
 }
 export const ProductSkus = sequelize.define<ProductSkusModel>(
   "ProductSkus",
@@ -51,19 +52,23 @@ export const ProductSkus = sequelize.define<ProductSkusModel>(
     quantity: {
       type: DataTypes.INTEGER,
     },
+    isDefault: {
+      type: DataTypes.BOOLEAN,
+      defaultValue:false
+    },
   },
   {
     freezeTableName: true,
-    defaultScope: {
-      attributes: { exclude: ["id", "ProductId"] },
-    },
-    scopes: {
-      withId: {
-        attributes: {
-          exclude: [],
-        },
-      },
-    },
+    // defaultScope: {
+    //   attributes: { exclude: ["id", "ProductId"] },
+    // },
+    // scopes: {
+    //   withId: {
+    //     attributes: {
+    //       exclude: [],
+    //     },
+    //   },
+    // },
   }
 );
 
@@ -76,7 +81,7 @@ ProductSkus.beforeBulkDestroy((options: any) => {
   return options;
 });
 async function deleteMedia(category: any, options: any) {
-  const instance = await ProductSkus.scope("withId").findOne({
+  const instance = await ProductSkus.findOne({
     where: {
       uuid: category.uuid,
     },

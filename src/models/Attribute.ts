@@ -7,41 +7,39 @@ import {
   InferCreationAttributes,
   UUIDV4,
 } from "sequelize";
-
-interface OptionModel
+interface AttributeModel
   extends Model<
-    InferAttributes<OptionModel>,
-    InferCreationAttributes<OptionModel>
+    InferAttributes<AttributeModel>,
+    InferCreationAttributes<AttributeModel>
   > {
   id?: CreationOptional<number>;
   uuid: CreationOptional<string>;
-  value: any;
-  AttributeId?: number;
+  title: string; // 'ssd' | 'ram' | 'color' | 'size'
+  type?: string;
 }
-export const Option = sequelize.define<OptionModel>(
-  "Option",
+export const Attribute = sequelize.define<AttributeModel>(
+  "Attribute",
   {
     uuid: {
       type: DataTypes.UUID,
       defaultValue: UUIDV4,
       unique: true,
     },
-    value: {
+    title: {
+      //general table for adding all the types of the products
+      // 'ssd' | 'ram' | 'color' | 'size'
       type: DataTypes.STRING,
+      allowNull: false,
       unique: true,
     },
-    AttributeId: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      references: {
-        model: "Attributes",
-        key: "id",
-      },
+    type: {
+      type: DataTypes.STRING,
     },
-  }
+  },
   // {
+  
   //   defaultScope: {
-  //     attributes: { exclude: ["id","AttributeId"] },
+  //     attributes: { exclude: ["id"] },
   //   },
   //   scopes: {
   //     withId: {

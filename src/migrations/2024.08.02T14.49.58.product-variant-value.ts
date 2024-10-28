@@ -14,19 +14,21 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
       defaultValue: UUIDV4,
       unique: true,
     },
+    label: {
+      type: DataTypes.STRING,
+    },
     OptionId: {
       type: DataTypes.INTEGER,
-
       references: {
         model: "Options",
         key: "id",
       },
       allowNull: false,
     },
-    ProductVariantTypeId: {
+    AttributeId: {
       type: DataTypes.INTEGER,
       references: {
-        model: "ProductVariantTypes",
+        model: "Attributes",
         key: "id",
       },
       allowNull: false,

@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from "express";
 import { BadRequestError } from "../../utils/api-errors";
-import { ProductTypes } from "../../models/ProductType";
 import { Cart } from "../../models/Cart";
 import { Product } from "../../models/Product";
 import { ProductSkus } from "../../models/ProductSku";
@@ -88,10 +87,10 @@ export const CreateUpdate = async (
     });
     let productSku = null;
     if (productSkuUniqueId) {
-      productSku = await ProductSkus.scope("withId").findOne({
+      productSku = await ProductSkus.findOne({
         where: {
           uuid: productSkuUniqueId,
-        },
+        }
       });
     }
 

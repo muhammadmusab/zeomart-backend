@@ -5,8 +5,8 @@ import { Token } from "../../models/Token";
 import { Address } from "../../models/Address";
 import { Product } from "../../models/Product";
 import { ProductSkus } from "../../models/ProductSku";
-import { ProductVariantType } from "../../models/ProductVariantType";
-import { ProductTypes } from "../../models/ProductType";
+
+import { Attribute } from "../../models/Attribute";
 import { ProductVariantValues } from "../../models/ProductVariantValue";
 import { SkuVariations } from "../../models/SkuVariation";
 import { Category } from "../../models/Category";
@@ -14,9 +14,13 @@ import { Filter } from "../../models/Filter";
 import { Social } from "../../models/Social";
 import { Media } from "../../models/Media";
 import { FilterCategory } from "../../models/FilterCategory";
-import { Brand } from "../../models/Brand";
 import { Option } from "../../models/Options";
 import { FilterOption } from "../../models/FilterOption";
+import { ProductReview } from "../../models/ProductReview";
+import { ProductQuestion } from "../../models/ProductQuestion";
+import { ProductAnswer } from "../../models/ProductAnswer";
+
+
 
 //-------self referencial tables---------
 
@@ -36,7 +40,7 @@ Category.hasMany(Category, {
 });
 
 // vendor profile related relations
-Category.belongsToMany(Filter, {as:'filter', through: FilterCategory });
+Category.belongsToMany(Filter, { as: "filter", through: FilterCategory });
 Filter.belongsToMany(Category, { as: "categories", through: FilterCategory });
 Category.hasMany(FilterCategory);
 FilterCategory.belongsTo(Category);
@@ -45,7 +49,7 @@ FilterCategory.belongsTo(Filter);
 
 //-------------------Product relations
 Category.hasMany(Product);
-Product.belongsTo(Category); //categoryId in Product table
+Product.belongsTo(Category,{as:"category",foreignKey:"CategoryId"}); //categoryId in Product table
 
 User.hasMany(Auth, { onDelete: "CASCADE" });
 Auth.belongsTo(User); // UserId in Auth Table
@@ -71,23 +75,11 @@ Product.belongsTo(Vendor);
 Vendor.hasMany(Social);
 Social.belongsTo(Vendor);
 
-// ----PRODUCT VARIANT TYPE
-// product and product variant type relation
-Product.hasMany(ProductVariantType, { onDelete: "CASCADE" });
-ProductVariantType.belongsTo(Product); //productId in ProductVariantType table
-
-ProductTypes.hasMany(ProductVariantType, { onDelete: "CASCADE" });
-ProductVariantType.belongsTo(ProductTypes); //productTypeId in ProductVariantType table
-
-//-----PRODUCT VARIANT VALUE
-// product variant type and product variant value relation
-ProductVariantType.hasMany(ProductVariantValues, { onDelete: "CASCADE" });
-ProductVariantValues.belongsTo(ProductVariantType); //ProductVariantTypeId in ProductVariantValues table
 
 //---- PRODUCT SKU TABLE
 
 // ProductSkus relation with product
-Product.hasMany(ProductSkus, { onDelete: "CASCADE" });
+Product.hasMany(ProductSkus, {as:"skus", onDelete: "CASCADE" });
 ProductSkus.belongsTo(Product); //productId in ProductSkus table
 
 //---- SKU VARIATION TABLE (ProductId,ProductSkuId,ProductVariantValueId) in variation table
@@ -157,18 +149,46 @@ Media.belongsTo(ProductSkus, {
 });
 
 
-// BRAND
-Brand.hasMany(Product);
-Product.belongsTo(Brand); //BrandId in Product table
+Option.hasMany(Product);
+Product.belongsTo(Option,{as:"brand",foreignKey:"OptionId"}); //OptionId in Product table
 
-// options
-Option.hasMany(ProductVariantValues);
-ProductVariantValues.belongsTo(Option); //OptionId in ProductVariantValues table
+Option.hasMany(ProductVariantValues,{as:'options'});
+ProductVariantValues.belongsTo(Option,{as:'options',foreignKey:"OptionId"}); //OptionId in ProductVariantValue table
+
+Attribute.hasMany(ProductVariantValues,{as:'attribute'});
+ProductVariantValues.belongsTo(Attribute,{as:'attribute',foreignKey:"AttributeId"}); //AttributeId in ProductVariantValue table
 
 
-Option.belongsToMany(Filter, {as:'filter', through: FilterOption });
+Attribute.hasMany(Option,{as: "options"});
+Option.belongsTo(Attribute); //AttributeId in Option table
+
+
+// FilterOption
+Option.belongsToMany(Filter, { as: "filters", through: FilterOption });
 Filter.belongsToMany(Option, { as: "options", through: FilterOption });
 Option.hasMany(FilterOption);
 FilterOption.belongsTo(Option);
 Filter.hasMany(FilterOption);
 FilterOption.belongsTo(Filter);
+
+
+Attribute.hasMany(Filter,{as: "filters"});
+Filter.belongsTo(Attribute,{as:"attribute",foreignKey:"AttributeId"}); //AttributeId in Filter table
+
+
+// REVIEWS
+Product.hasMany(ProductReview, { as:"rating", onDelete: "CASCADE" });
+ProductReview.belongsTo(Product); // ProductId in Review Table
+ProductSkus.hasMany(ProductReview, { as:"rating", onDelete: "CASCADE" });
+ProductReview.belongsTo(ProductSkus); // ProductId in Review Table
+User.hasMany(ProductReview, { as:"rating", onDelete: "CASCADE" });
+ProductReview.belongsTo(User); // UserId in Review Table
+
+
+// FAQ
+Product.hasMany(ProductQuestion, { as:"question", onDelete: "CASCADE" });
+ProductQuestion.belongsTo(Product); // ProductId in Question Table
+ProductAnswer.hasMany(ProductQuestion, { as:"question", onDelete: "CASCADE" });
+ProductQuestion.belongsTo(ProductAnswer); // AnswerId in Question Table
+Product.hasMany(ProductAnswer, { as:"answer", onDelete: "CASCADE" });
+ProductAnswer.belongsTo(Product); // ProductId in Answer Table

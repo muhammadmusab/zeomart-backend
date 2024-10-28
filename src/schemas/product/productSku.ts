@@ -30,6 +30,14 @@ export const deleteProductSkuSchema = yup.object({
     uid: yup.string().uuid().required(), //uuid of the Product SKu
   }),
 });
+export const setDefaultVariantSchema = yup.object({
+  body: yup
+    .object({
+      productSku: yup.string().uuid().required(),
+      product: yup.string().uuid().required(),
+    })
+    .required(),
+});
 export const getProductSkuSchema = yup.object({
   params: yup.object({
     uid: yup.string().uuid().required(), //uuid of the Product SKu

@@ -43,17 +43,17 @@ export const FilterOption = sequelize.define<FilterOptionModel>(
     },
   },
   {
-    defaultScope: {
-    //   attributes: { exclude: ["id", "FilterId", "OptionId"] },
-      attributes: { exclude: [] },
-    },
-    scopes: {
-      withId: {
-        attributes: {
-          exclude: [],
-        },
-      },
-    },
+    // defaultScope: {
+    // //   attributes: { exclude: ["id", "FilterId", "OptionId"] },
+    //   attributes: { exclude: [] },
+    // },
+    // scopes: {
+    //   withId: {
+    //     attributes: {
+    //       exclude: [],
+    //     },
+    //   },
+    // },
     freezeTableName: true,
   }
 );

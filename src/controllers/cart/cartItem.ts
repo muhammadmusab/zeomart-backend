@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from "express";
 import { BadRequestError } from "../../utils/api-errors";
-import { ProductTypes } from "../../models/ProductType";
 import { Cart } from "../../models/Cart";
 import { Product } from "../../models/Product";
 import { ProductSkus } from "../../models/ProductSku";
@@ -41,10 +40,11 @@ export const CreateUpdate = async (
       },
     });
 
-    const productSku = await ProductSkus.scope("withId").findOne({
+    const productSku = await ProductSkus.findOne({
       where: {
         uuid: productSkuUniqueId,
       },
+      
     });
 
     // if product has variant then it requires FE to send product sku unique id

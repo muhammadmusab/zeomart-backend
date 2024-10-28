@@ -42,11 +42,6 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
       type: DataTypes.ARRAY(DataTypes.INTEGER),
       allowNull: false,
     },
-    setAsDefault: {
-      type: DataTypes.BOOLEAN,
-      // allowNull: false,
-      defaultValue:false
-    },
     createdAt: {
       type: DataTypes.DATE,
     },

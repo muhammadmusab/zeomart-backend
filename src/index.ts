@@ -63,14 +63,20 @@ import filterRoutes from "./routes/filter";
 import productRoutes from "./routes/product/product";
 import brandRoutes from "./routes/product/brand";
 import productVariantRoutes from "./routes/product/productVariant";
-import productVariantTypeRoutes from "./routes/product/productVariantType";
-import productTypesRoutes from "./routes/product/productTypes";
+import attributeRoutes from "./routes/attribute";
+import optionRoutes from "./routes/option";
 import productSkuRoutes from "./routes/product/productSku";
 import productReviewRoutes from "./routes/product/productReview";
 import productFavouritesRoutes from "./routes/product/productFavourites";
 // cart
 import cartRoutes from "./routes/cart/cart";
 import cartItemRoutes from "./routes/cart/cartItem";
+
+
+//attribute
+app.use("/v1/api/attribute", attributeRoutes);
+app.use("/v1/api/option", optionRoutes);
+
 
 import couponRoutes from "./routes/coupon";
 import shippingRoutes from "./routes/shipping";
@@ -85,14 +91,14 @@ app.use("/v1/api/filter", filterRoutes);
 
 app.use("/v1/api/brand", brandRoutes);
 
+
 // product
 app.use("/v1/api/product", productRoutes);
 
-app.use("/v1/api/product/types", productTypesRoutes);
-app.use("/v1/api/product/variant", productVariantRoutes);
-app.use("/v1/api/product/variant-type", productVariantTypeRoutes);
-app.use("/v1/api/product/sku", productSkuRoutes);
+
 app.use("/v1/api/product/review", productReviewRoutes);
+app.use("/v1/api/product/sku", productSkuRoutes);
+app.use("/v1/api/product/variant", productVariantRoutes);
 app.use("/v1/api/product/favourites", productFavouritesRoutes);
 
 // cart

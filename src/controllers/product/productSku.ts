@@ -4,11 +4,12 @@ import { Request, Response, NextFunction } from "express";
 import { BadRequestError } from "../../utils/api-errors";
 import { getValidUpdates } from "../../utils/validate-updates";
 import { getPaginated } from "../../utils/paginate";
-import { ProductVariantType } from "../../models/ProductVariantType";
 import { ProductVariantValues } from "../../models/ProductVariantValue";
 import { SkuVariations } from "../../models/SkuVariation";
 import { ProductSkus } from "../../models/ProductSku";
-
+import { Op } from "sequelize";
+import { Media } from "../../models/Media";
+import { UnprocessableError } from "../../utils/api-errors/unprocessable-content";
 
 export const Create = async (
   req: Request,
@@ -26,6 +27,17 @@ export const Create = async (
 
     if (!_product) {
       return res.status(403).send({ message: "Product not found" });
+    }
+
+    const _foundProductSku = await ProductSkus.findOne({
+      where: {
+        sku: sku,
+        ProductId: _product.id,
+      },
+    });
+    if (_foundProductSku) {
+      const error = new UnprocessableError("Sku already found");
+      return next(error);
     }
 
     //4 Create Skus
@@ -106,6 +118,49 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
     next(error);
   }
 };
+export const setDefaultVariant = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { productSku, product } = req.body;
+    const _product = await Product.scope("withId").findOne({
+      where: {
+        uuid: product,
+      },
+    });
+    await ProductSkus.update(
+      {
+        isDefault: false,
+      },
+      {
+        where: {
+          ProductId: _product?.id,
+        },
+      }
+    );
+    const _productSku = await ProductSkus.findOne({
+      where: {
+        uuid: productSku,
+      },
+    });
+    if (_productSku) {
+      _productSku.isDefault = true;
+      await _productSku?.save();
+      await _productSku.reload();
+    }
+
+    if (!_productSku) {
+      const err = new BadRequestError("Could not update");
+      res.status(err.status).send({ message: err.message });
+      return;
+    }
+    res.send({ message: "Success", data: _productSku });
+  } catch (error) {
+    next(error);
+  }
+};
 export const Delete = async (
   req: Request,
   res: Response,
@@ -114,12 +169,24 @@ export const Delete = async (
   try {
     const { uid } = req.params; // ProductSkuUniqueId
 
-    const result = await ProductSkus.scope("withId").destroy({
+    const _productSku = await ProductSkus.findOne({
       where: {
         uuid: uid,
       },
     });
-    if (result === 1) {
+    if (_productSku) {
+      await Media.destroy({
+        where: {
+          mediaableId: _productSku.id,
+          mediaableType: "ProductSku",
+        },
+      });
+      await SkuVariations.destroy({
+        where: {
+          ProductSkuId: _productSku.id,
+        },
+      });
+      await _productSku.destroy();
       res.send({ message: "Success" });
     } else {
       const err = new BadRequestError("Bad Request");
@@ -137,6 +204,8 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     const sortAs = req.query.sortAs ? (req.query.sortAs as string) : "DESC";
 
     const { uid } = req.params; // productUniqueId
+    //@ts-expect-error
+    const { title: sku } = req.search;
 
     const product = await Product.scope("withId").findOne({
       where: {
@@ -144,17 +213,20 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
       },
     });
 
-    const productVariations = await ProductSkus.findAll({
+    const _productSku = await ProductSkus.findAll({
       where: {
         ProductId: product?.id,
+        sku: {
+          [Op.iLike]: `%${sku}%`,
+        },
       },
       attributes: {
         exclude: ["ProductId", "id"],
       },
-      order: [[sortBy as string, sortAs]],
+      // order: [[sortBy as string, sortAs]],
     });
 
-    res.send({ message: "Success", data: productVariations });
+    res.send({ message: "Success", data: _productSku });
   } catch (error: any) {
     console.log(error.message);
     next(error);
