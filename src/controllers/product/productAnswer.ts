@@ -32,7 +32,7 @@ export const Create = async (
       },
     });
     if (_question) {
-      _question.dataValues.AnswerId = _productAnswer.id;
+      _question.dataValues.ProductAnswerId = _productAnswer.id;
       await _question.save();
     }
 

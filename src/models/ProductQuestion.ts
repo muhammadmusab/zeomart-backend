@@ -17,8 +17,10 @@ interface ProductQuestionModel
   id?: CreationOptional<number>;
   uuid: CreationOptional<string>;
   question: string;
+  answer?: string;
   ProductId?: CreationOptional<number>;
-  AnswerId?: number;
+  ProductAnswerId?: number;
+  UserId?: number;
 }
 export const ProductQuestion = sequelize.define<ProductQuestionModel>(
   "ProductQuestion",
@@ -32,6 +34,9 @@ export const ProductQuestion = sequelize.define<ProductQuestionModel>(
       type: DataTypes.TEXT,
       allowNull: false,
     },
+    answer: {
+      type: DataTypes.TEXT,
+    },
     ProductId: {
       type: DataTypes.INTEGER,
       references: {
@@ -40,14 +45,13 @@ export const ProductQuestion = sequelize.define<ProductQuestionModel>(
       },
       allowNull: false,
     },
-    AnswerId: {
-        type: DataTypes.INTEGER,
-        references: {
-          model: "ProductAnswer",
-          key: "id",
-        },
-        allowNull: false,
+    UserId: {
+      type: DataTypes.INTEGER,
+      references: {
+        model: "Users",
+        key: "id",
       },
+    },
   },
   {
     freezeTableName: true,

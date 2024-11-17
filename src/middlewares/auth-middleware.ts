@@ -31,6 +31,7 @@ const authMiddleware = ( type?:UserType,ignoreExpiration = false,) => {
       });
       // throwing err if token not found in header
       if (!accessToken || !getRefreshToken) {
+        console.log('accessTOKEN not found')
         const err = new AuthError();
         err.message = "Unauthorised";
         return res.status(401).send({ message: err.message });
@@ -54,10 +55,11 @@ const authMiddleware = ( type?:UserType,ignoreExpiration = false,) => {
 
       verifyDecodedToken(decoded, "email");
       if(!type && req.query.type){
+      
         type=req.query.type as UserType
       }
-
-      user = await Auth.findOne({
+      
+      user = await Auth.scope('withoutPassword').findOne({
         where: {
           email: decoded.email,
         },
@@ -70,8 +72,7 @@ const authMiddleware = ( type?:UserType,ignoreExpiration = false,) => {
       if (type && user?.type !== type) {
         return res.status(403).send({ message: "Invalid User" });
       }
-
-      if (user?.verified) {
+      if (!Boolean(user?.verified)) {
         const err = new AuthError();
         err.message = "User Not Verified";
         err.status = 401;

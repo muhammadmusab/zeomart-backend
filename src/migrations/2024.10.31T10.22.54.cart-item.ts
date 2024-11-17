@@ -2,7 +2,7 @@ import type { Migration } from '../umguz';
 import { DataTypes, Sequelize, UUIDV4 } from 'sequelize';
 
 export const up: Migration = async ({ context }: { context: Sequelize }) => {
-  await context.getQueryInterface().createTable('ProductQuestion', {
+  await context.getQueryInterface().createTable('CartItem', {
     id: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -14,12 +14,20 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
       defaultValue: UUIDV4,
       unique: true,
     },
-    question: {
-      type: DataTypes.TEXT,
+    subTotal: {
+      type: DataTypes.DECIMAL(12, 2),
       allowNull: false,
     },
-    answer: {
-      type: DataTypes.TEXT,
+    quantity: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    CartId: {
+      type: DataTypes.INTEGER,
+      references: {
+        model: "Cart",
+        key: "id",
+      },
       allowNull: false,
     },
     ProductId: {
@@ -30,17 +38,18 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
       },
       allowNull: false,
     },
-    ProductAnswerId: {
+    VendorId: {
       type: DataTypes.INTEGER,
       references: {
-        model: "ProductAnswer",
+        model: "Vendors",
         key: "id",
       },
+      allowNull: false,
     },
-    UserId: {
+    ProductSkuId: {
       type: DataTypes.INTEGER,
       references: {
-        model: "Users",
+        model: "ProductSkus",
         key: "id",
       },
     },
@@ -54,5 +63,5 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
 };
 
 export const down: Migration = async ({ context }: { context: Sequelize }) => {
-  await context.getQueryInterface().dropTable('ProductQuestion');
+  await context.getQueryInterface().dropTable('CartItem');
 };

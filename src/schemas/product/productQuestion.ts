@@ -4,18 +4,26 @@ export const createProductQuestionSchema = yup.object({
   body: yup
     .object({
       product: yup.string().uuid().required(),
-      question: yup.string().uuid().required(),//uuid
+      question: yup.string().required(),//uuid
     })
     .required(),
 });
-export const updateProductQuestionSchema = yup.object({
+export const createProductAnswerSchema = yup.object({
   body: yup
     .object({
-      question: yup.string(),
+      question: yup.string().uuid().required(),
+      answer: yup.string().required(),//uuid
+    })
+    .required(),
+});
+export const updateProductAnswerSchema = yup.object({
+  body: yup
+    .object({
+      answer: yup.string(),
     })
     .required(),
   params: yup.object({
-    uid: yup.string().uuid().required(), //uuid of the Coupon
+    uid: yup.string().uuid().required(), //uuid of the question
   }),
 });
 

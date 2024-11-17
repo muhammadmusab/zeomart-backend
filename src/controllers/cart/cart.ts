@@ -5,222 +5,383 @@ import { Product } from "../../models/Product";
 import { ProductSkus } from "../../models/ProductSku";
 import { CartItem } from "../../models/CartItem";
 import { sequelize } from "../../config/db";
-import { ProductImage } from "../../models/ProductImage";
 import { Shipping } from "../../models/Shipping";
 import { CouponCart } from "../../models/CouponCart";
 import { Coupons } from "../../models/Coupon";
 import { readFile } from "fs/promises";
 import path from "path";
+import { User } from "../../models/User";
+import { Media } from "../../models/Media";
+import { SkuVariations } from "../../models/SkuVariation";
+import { ProductVariantValues } from "../../models/ProductVariantValue";
+import { Option } from "../../models/Options";
+import { Attribute } from "../../models/Attribute";
+import { isValidUUID } from "../../utils/is-valid-uuid";
+import { Op, QueryTypes } from "sequelize";
+import { Vendor } from "../../models/Vendor";
 interface CartItemType {
   subTotal?: number;
   quantity?: number;
   ProductId?: number | null;
   CartId?: number | null;
   ProductSkuId?: number | null;
-  ProductImageId?: number | null;
+  VendorId: number;
+  MediaId?: number | null;
 }
-export const Create = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const {
-      cartUniqueId, // it is optional ( if cart is not created yet then it will be null or undefined )
-    } = req.body;
 
-    let cart = null;
-    // if cart already exists
-    if (cartUniqueId) {
-      cart = await Cart.scope("withId").findOne({
-        where: {
-          uuid: cartUniqueId,
-        },
-      });
-      if (cart) {
-        return res.status(403).send({
-          message: `Cart already exists`,
-        });
-      }
-    }
-    // creating new cart if not exists
-    if (!cart || !cartUniqueId) {
-      // initially cart has no products added or in other words cart is not created yet.
-      cart = await Cart.create({
-        totalPrice: 0,
-        status: "PENDING",
-      });
-    }
-
-    res.status(201).send({
-      message: "Success",
-      data: cart,
-    });
-  } catch (error: any) {
-    next(error);
-  }
-};
-
+// cart item create/update
 export const CreateUpdate = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
+    // cart item related values
+    // of single product we are adding to cart item
     const {
-      // cart item related values
-      // of single product we are adding to cart item
       quantity, // of single product...
-      productUniqueId,
-      cartUniqueId, // it is optional ( if cart is not created yet then it will be null or undefined )
-      productSkuUniqueId, // if product sku unique id has different variants.
-      cartItemUniqueId,
-      productImageUniqueId,
+      product, // uuid of product
+      cart, // uuid of cart
+      productSku, // productSku (optional if available)
     } = req.body;
 
     let subTotal = 0;
+    let _productSku = null;
 
-    const product = await Product.scope("withId").findOne({
+    const _product = await Product.scope("withId").findOne({
       where: {
-        uuid: productUniqueId,
+        uuid: product,
       },
     });
-    let productSku = null;
-    if (productSkuUniqueId) {
-      productSku = await ProductSkus.findOne({
+
+    if (productSku) {
+      _productSku = await ProductSkus.findOne({
         where: {
-          uuid: productSkuUniqueId,
-        }
+          uuid: productSku,
+        },
       });
     }
 
     // if product has variant then it requires FE to send product sku unique id
-    if (product?.hasVariants && !productSkuUniqueId) {
+    if (_product?.hasVariants && !_productSku) {
       return res.status(403).send({
-        message: "productSkuUniqueId required",
+        message: "productSku required",
       });
     }
 
-    // calculating subtotal
-    if (product?.hasVariants && productSku) {
-      subTotal = productSku?.currentPrice * quantity;
-    } else {
-      subTotal = (product?.currentPrice as number) * quantity;
-    }
+    let { _cart } = await getOrCreateCart({ uid: cart, user: req.user });
 
-    let cart = null;
-    // if cart already exists
-    if (cartUniqueId) {
-      cart = await Cart.scope("withId").findOne({
-        where: {
-          uuid: cartUniqueId,
-        },
-      });
-      if (!cart) {
-        return res.status(403).send({
-          message: `cart with id ${cartUniqueId} not found`,
-        });
-      }
+    const CartId = _cart.dataValues.id ? _cart.dataValues.id : _cart.id;
+
+    const cartItemWhere: any = {
+      CartId: CartId,
+      ProductId: _product?.id,
+    };
+    if (_productSku) {
+      cartItemWhere.ProductSkuId = _productSku?.id;
     }
-    // creating new cart if not exists
-    if (!cart || !cartUniqueId) {
-      // initially cart has no products added or in other words cart is not created yet.
-      cart = await Cart.create({
-        totalPrice: 0,
-        status: "PENDING",
-      });
-    }
-    let CartId = cart.id;
-    let cartItem = null;
+    let _cartItem = await CartItem.findOne({
+      where: cartItemWhere,
+    });
 
     // if cart Item of a cart already exists
-    if (cartItemUniqueId) {
-      cartItem = await CartItem.scope("withId").findOne({
-        where: {
-          uuid: cartItemUniqueId,
-        },
-      });
-      if (!cartItem) {
-        return res.status(403).send({
-          message: "invalid cart item id",
-        });
+    if (_cartItem) {
+      _cartItem.quantity = _cartItem.quantity + quantity;
+      // calculating subtotal of existing cart item
+
+      if (_product?.hasVariants && _productSku) {
+        subTotal = (_productSku?.currentPrice * _cartItem.quantity!) as number;
+        if (
+          _productSku.quantity &&
+          _cartItem.quantity &&
+          _productSku.quantity >= _cartItem.quantity
+        ) {
+          _productSku.quantity = _productSku.quantity - _cartItem.quantity!;
+          await _productSku.save();
+          await _productSku.reload();
+        }
+      } else {
+        subTotal = ((_product?.currentPrice as number) *
+          _cartItem.quantity!) as number;
+        if (
+          _product &&
+          _product.quantity &&
+          _cartItem.quantity &&
+          _product.quantity >= _cartItem.quantity
+        ) {
+          _product.quantity = _product.quantity - _cartItem.quantity!;
+          await _product.save();
+          await _product.reload();
+        }
       }
+
+      _cartItem.subTotal = subTotal;
+
+      await _cartItem.save();
+      await _cartItem.reload();
     } else {
-      const productImage = await ProductImage.scope("withId").findOne({
-        where: {
-          uuid: productImageUniqueId,
-        },
-      });
+      // calculating subtotal of new cart item
+      if (_product?.hasVariants && _productSku) {
+        subTotal = _productSku?.currentPrice * quantity;
+      } else {
+        subTotal = (_product?.currentPrice as number) * quantity;
+      }
 
       const cartItemPayload: CartItemType = {
-        ProductImageId: productImage?.id,
-        CartId,
-        ProductId: product?.id,
+        // MediaId: _media?.id,
+        CartId: CartId,
+        ProductId: _product?.id,
         subTotal,
         quantity,
+        VendorId: _product?.VendorId!,
       };
-
-      if (productSku && productSku.id) {
-        cartItemPayload.ProductSkuId = productSku.id;
+      if (_productSku && _productSku.id) {
+        cartItemPayload.ProductSkuId = _productSku.id;
       }
-      cartItem = await CartItem.create(cartItemPayload);
+      _cartItem = await CartItem.create(cartItemPayload);
     }
-    // if cart item already exists , update values:
-    cartItem.subTotal = subTotal;
-    cartItem.quantity = quantity;
-    await cartItem.save();
-    await cartItem.reload();
 
     // find total of all the products to update cart total price.
-    let cartItems: any = await CartItem.findAll({
+    // improve THIS PORTION with raw query
+    let _cartItems: any = await CartItem.findAll({
       where: {
-        CartId,
+        CartId: CartId,
       },
       attributes: [
         [sequelize.fn("sum", sequelize.col("subTotal")), "total_amount"],
       ],
       raw: true, //to directly get the value
     });
-    let totalAmount = cartItems[0].total_amount;
 
-    cart.totalPrice = totalAmount;
+    let totalAmount = _cartItems[0].total_amount;
 
-    await cart.save();
-    await cart.reload();
+    if (_cart && totalAmount) {
+      _cart.subTotal = totalAmount;
+      _cart.totalPrice =
+        _cart.subTotal +
+        _cart.shippingCost +
+        _cart.taxAmount -
+        _cart.discountAmount;
 
-    // return the cart and cart items information
-    let cartItemData = await CartItem.findAll({
+      await _cart?.save();
+      await _cart?.reload();
+    }
+    let data = await Cart.scope("withId").findOne({
       where: {
-        CartId,
+        id: CartId,
       },
       include: [
         {
-          model: ProductSkus,
-        },
-        {
-          model: Product,
+          model: CartItem,
+          as: "cartItems",
           attributes: {
-            exclude: ["id", "specifications", "highlights"],
+            exclude: ["id", "CartId", "ProductId", "ProductSkuId"],
           },
-        },
-        {
-          model: ProductImage,
+          include: [
+            {
+              model: ProductSkus,
+              as: "sku",
+              attributes: {
+                exclude: ["id", "ProductId"],
+              },
+              include: [
+                {
+                  model: Media,
+                  as: "media",
+                  required: false,
+                  where: {
+                    default: true,
+                  },
+                  attributes: {
+                    exclude: ["id", "mediaableId"],
+                  },
+                },
+                {
+                  model: SkuVariations,
+                  attributes: {
+                    exclude: [
+                      "id",
+                      "combinationIds",
+                      "ProductSkuId",
+                      "ProductVariantValueId",
+                      "ProductId",
+                    ],
+                  },
+                  include: [
+                    {
+                      model: ProductVariantValues,
+                      attributes: {
+                        exclude: ["id", "OptionId", "AttributeId"],
+                      },
+                      include: [
+                        {
+                          model: Attribute,
+                          attributes: {
+                            exclude: ["id"],
+                          },
+                          as: "attribute",
+                          include: [
+                            {
+                              model: Option,
+                              as: "options",
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              model: Product,
+              as: "product",
+              attributes: {
+                exclude: [
+                  "id",
+                  "OptionId",
+                  "VendorId",
+                  "CategoryId",
+                  "specifications",
+                  "highlights",
+                ],
+              },
+              include: [
+                {
+                  model: Media,
+                  as: "media",
+                  required: false,
+                  where: {
+                    default: true,
+                  },
+                  attributes: {
+                    exclude: ["id", "mediaableId"],
+                  },
+                },
+              ],
+            },
+          ],
         },
       ],
     });
 
-    let cartData = await Cart.findOne({
-      where: {
-        id: CartId,
-      },
-    });
+    // return the cart and cart items information
+    // let data = await CartItem.findAll({
+    //   where: {
+    //     CartId: CartId,
+    //   },
+    //   include: [
+    //     {
+    //       model: Cart,
+    //     },
+    //     {
+    //       model: ProductSkus,
+    //     },
+    //     {
+    //       model: Product,
+    //     },
+    //     {
+    //       model: Media,
+    //       where: {
+    //         default: true,
+    //       },
+    //     },
+    //   ],
+    // });
 
     res.status(201).send({
       message: "Success",
-      data: {
-        cart: cartData,
-        cartItem: cartItemData,
+      data,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+export const Get = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { uid } = req.params; // cart uuid (optional)
+    const { _cart, data } = await getOrCreateCart({ uid, user: req.user });
+    if (_cart.dataValues.id) {
+      delete _cart.dataValues.id;
+    }
+    const resultData: any = data;
+    res.send({
+      message: "Success",
+
+      data: resultData?.length ? resultData[0] : resultData,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+// export const Create = async (
+//   req: Request,
+//   res: Response,
+//   next: NextFunction
+// ) => {
+//   try {
+//     const { cart } = req.body;
+//     let _cart = null;
+//     // if cart already exists
+//     if (cart) {
+//       _cart = await Cart.scope("withId").findOne({
+//         where: {
+//           uuid: cart,
+//         },
+//       });
+//     }
+//     // creating new cart if not exists
+//     if (!_cart || !cart) {
+//       // initially cart has no products added or in other words cart is not created yet.
+//       _cart = await Cart.create({
+//         totalPrice: 0,
+//         shippingCost: 0,
+//         subTotal: 0,
+//         taxAmount: 0,
+//         discountAmount: 0,
+//         status: "IN_CART",
+//       });
+//       delete _cart.dataValues.UserId;
+//       delete _cart.dataValues.id;
+//     }
+
+//     res.status(201).send({
+//       message: "Success",
+//       data: _cart,
+//     });
+//   } catch (error: any) {
+//     next(error);
+//   }
+// };
+
+export const AddUser = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { uid } = req.params;
+    const user = req.user.User?.uuid;
+    const _user = await User.scope("withId").findOne({
+      where: {
+        uuid: user,
       },
+    });
+    const _cart = await Cart.findOne({
+      where: {
+        uuid: uid,
+      },
+    });
+    if (_cart) {
+      _cart.UserId = _user?.id;
+      await _cart.save();
+      await _cart.reload();
+    }
+
+    res.status(201).send({
+      message: "Success",
+      data: _cart,
     });
   } catch (error: any) {
     next(error);
@@ -234,79 +395,41 @@ export const Delete = async (
 ) => {
   try {
     const { uid } = req.params; // uid of the cart
-
-    const result = await Cart.destroy({
-      where: {
-        uuid: uid,
-      },
-    });
-    if (result === 1) {
-      res.send({ message: "Success" });
-    } else {
-      const err = new BadRequestError("Bad Request");
-      res.status(err.status).send({ message: err.message });
-    }
-  } catch (error) {
-    next(error);
-  }
-};
-export const Get = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { uid } = req.params; // uuid of the product variant NOT the variant values
-
-    const cartData = await Cart.scope("withId").findOne({
+    const _cart = await Cart.scope("withId").findOne({
       where: {
         uuid: uid,
       },
     });
 
-    if (!cartData) {
-      return res.status(404).send({ message: "Cart not found" });
-    }
-
-    const cartItemData = await CartItem.findAll({
+    await CartItem.destroy({
       where: {
-        CartId: cartData.id,
+        CartId: _cart?.id,
       },
-      include: [
-        {
-          model: ProductSkus,
-        },
-        {
-          model: Product,
-          attributes: {
-            exclude: ["specifications", "highlights"],
-          },
-        },
-        {
-          model: ProductImage,
-        },
-      ],
     });
 
-    delete cartData.dataValues.id;
-
-    res.send({
-      message: "Success",
-      data: { cart: cartData, cartItem: cartItemData },
-    });
+    await _cart?.destroy();
+    res.send({ message: "Success" });
   } catch (error) {
     next(error);
   }
 };
+
 export const List = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const cartData = await Cart.findAll({
+    const _cart = await Cart.findAll({
       include: [
         {
           model: CartItem,
         },
+        {
+          model: User,
+        },
       ],
     });
 
     res.send({
       message: "Success",
-      data: cartData,
+      data: _cart,
     });
   } catch (error) {
     next(error);
@@ -408,7 +531,6 @@ export const CalculateTotal = async (
     // calculate add shipping cost in total amount of cart
     totalPrice = totalPrice + shippingCost;
 
-
     // check if coupon is applied to this total amount then calculate coupon amount as well.
     let couponCart = await CouponCart.scope("withId").findOne({
       where: {
@@ -450,7 +572,6 @@ export const CalculateTotal = async (
         }
       }
     }
-   
 
     cart.totalPrice = totalPrice;
     await cart.save();
@@ -474,34 +595,397 @@ export const CalculateTotal = async (
   }
 };
 
-export const UpdateOrderStatus = async (
+export const PlaceOrder = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const { cartUniqueId, status } = req.body;
-
-    const cart = await Cart.scope("withId").findOne({
+    const { paymentMethod } = req.body;
+    const user = req.user.User?.uuid;
+    const _user = await User.scope("withId").findOne({
       where: {
-        uuid: cartUniqueId,
+        uuid: user,
+      },
+    });
+    const _cart = await Cart.scope("withId").findOne({
+      where: {
+        UserId: _user?.id,
+        status: "IN_CART",
       },
     });
 
-    if (!cart) {
+    if (!_cart) {
       return res.status(404).send({ message: "Cart not found" });
     }
 
-    cart.status = status;
+    const _cartItem = await CartItem.findAll({
+      where: {
+        CartId: _cart.id,
+      },
+      attributes: ["ProductId", "ProductSkuId", "quantity"],
+    });
+    if (!_cartItem.length) {
+      const err = new BadRequestError("Cart is empty!");
+      return res.status(err.status).send({ message: err.message });
+    }
+    await sequelize.transaction(async (t) => {
+      _cart.status = "PENDING";
+      await Promise.all(
+        _cartItem.map(async (item) => {
+          if (item.ProductId) {
+            const _product = await Product.scope("withId").findOne({
+              where: {
+                id: item.ProductId,
+              },
+            });
 
-    await cart.save();
-    await cart.reload();
-    delete cart.dataValues.id;
+            if (_product && _product.quantity && item.quantity) {
+              _product.quantity = _product?.quantity - item.quantity;
+              await _product.save();
+            }
+          } else if (item.ProductSkuId) {
+            const _productSku = await ProductSkus.findOne({
+              where: {
+                id: item.ProductSkuId,
+              },
+            });
+
+            if (_productSku && _productSku.quantity && item.quantity) {
+              _productSku.quantity = _productSku?.quantity - item.quantity;
+              await _productSku.save();
+            }
+          }
+        })
+      );
+      if (paymentMethod === "cash_on_delivery") {
+        _cart.status = "CONFIRMED";
+      }
+      await _cart.save();
+      await _cart.reload();
+      delete _cart.dataValues.id;
+    });
+
     res.status(201).send({
       message: "Success",
-      data: cart,
+      data: _cart,
     });
   } catch (error: any) {
     next(error);
   }
+};
+
+export const OrderList = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    // const { uid } = req.params;
+    const vendor = req.user.Vendor?.uuid;
+    const _vendor = await Vendor.scope("withId").findOne({
+      where: {
+        uuid: vendor,
+      },
+    });
+    // const _cart = await Cart.scope("withId").findOne({
+    //   where: {
+    //     uuid: uid,
+    //   },
+    // });
+
+    const order = await Cart.findAll({
+      where: {
+        status: {
+          [Op.not]: "IN_CART",
+        },
+      },
+      include: [
+        {
+          model: CartItem,
+          as: "cartItems",
+          where: {
+            VendorId: _vendor?.id,
+          },
+          attributes: {
+            exclude: ["id", "CartId", "ProductId", "ProductSkuId", "VendorId"],
+          },
+          include: [
+            {
+              model: ProductSkus,
+              as: "sku",
+              attributes: {
+                exclude: ["id", "ProductId"],
+              },
+              include: [
+                // {
+                //   model: Media,
+                //   as: "media",
+                //   required: false,
+                //   where: {
+                //     default: true,
+                //   },
+                //   attributes: {
+                //     exclude: ["id", "mediaableId"],
+                //   },
+                // },
+                {
+                  model: SkuVariations,
+                  attributes: {
+                    exclude: [
+                      "id",
+                      "combinationIds",
+                      "ProductSkuId",
+                      "ProductVariantValueId",
+                      "ProductId",
+                    ],
+                  },
+                  include: [
+                    {
+                      model: ProductVariantValues,
+                      attributes: {
+                        exclude: ["id", "OptionId", "AttributeId"],
+                      },
+
+                      include: [
+                        {
+                          model: Attribute,
+                          attributes: {
+                            exclude: ["id"],
+                          },
+                          as: "attribute",
+                          include: [
+                            {
+                              model: Option,
+                              as: "options",
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              model: Product,
+              as: "product",
+              attributes: {
+                exclude: [
+                  "id",
+                  "OptionId",
+                  "VendorId",
+                  "CategoryId",
+                  "specifications",
+                  "highlights",
+                ],
+              },
+              // include: [
+              //   {
+              //     model: Media,
+              //     as: "media",
+              //     required: false,
+              //     where: {
+              //       default: true,
+              //     },
+              //     attributes: {
+              //       exclude: ["id", "mediaableId"],
+              //     },
+              //   },
+              // ],
+            },
+          ],
+        },
+      ],
+    });
+    res.send({ message: "Success", data: order });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+const getOrCreateCart = async (payload: { uid?: string; user?: any }) => {
+  const uuid = payload.uid === "undefined" ? undefined : payload.uid;
+  let where: any = {
+    uuid,
+    status: "IN_CART",
+  };
+  if (uuid && !isValidUUID(uuid)) {
+    delete where["uuid"];
+  }
+  let _cart = null;
+  let _user = null;
+
+  if (payload.user) {
+    const user = payload.user.User;
+    if (user && user?.uuid) {
+      _user = await User.scope("withId").findOne({
+        where: {
+          uuid: user?.uuid,
+        },
+      });
+      delete where.uuid;
+      where["UserId"] = _user?.id;
+    }
+
+    // if user logged in find cart through UserId
+    _cart = await Cart.scope("withId").findOne({
+      where,
+      order: [["createdAt", "DESC"]],
+    });
+    // If cart with that user id is not found , assign user to that cart
+    if (!_cart && _user?.id) {
+      if (uuid) {
+        _cart = await Cart.scope("withId").findOne({
+          where: {
+            uuid: uuid,
+            status: "IN_CART",
+          },
+          order: [["createdAt", "DESC"]],
+        });
+      }
+      if (_cart && !_cart.UserId) {
+        _cart.UserId = _user.id;
+        await _cart.save();
+        await _cart.reload();
+      }
+    }
+  } else {
+    if (uuid) {
+      _cart = await Cart.scope("withId").findOne({
+        where,
+      });
+    }
+  }
+  const query = `
+  SELECT 
+    c."uuid",
+    c."subTotal",
+    c."taxAmount",
+    c."shippingCost",
+    c."totalPrice",
+    c."discountAmount",
+    c."status",
+    c."createdAt",
+    jsonb_build_object('firstName',u."firstName",'lastName',u."lastName",'phone',u."phone") as "user",
+    array_agg(
+        DISTINCT jsonb_build_object(
+            'uuid', p."uuid",
+            'title', p."title",
+            'status', p."status",
+            'baseSku', p."sku",
+            'currentPrice', p."currentPrice",
+            'oldPrice', p."oldPrice",
+            'sold', p."sold",
+            'createdAt', p."createdAt",
+            'cartItem',jsonb_build_object(
+                'uuid', ci."uuid",
+                'quantity', ci."quantity",
+                'subTotal', ci."subTotal"
+            ),
+            'media', CASE 
+                WHEN EXISTS (
+                    SELECT 1 FROM "ProductSkus" ps WHERE ci."ProductSkuId" = ps."id"
+                ) THEN NULL
+                ELSE (
+                    SELECT jsonb_agg(DISTINCT jsonb_build_object(
+                        'url', pm."url",
+                        'width', pm."width",
+                        'height', pm."height",
+                        'size', pm."size",
+                        'mime', pm."mime",
+                        'name', pm."name"
+                    ))
+                    FROM "Media" pm
+                    WHERE pm."mediaableId" = p."id" 
+                    AND pm."mediaableType" = 'Product' 
+                    AND pm."default" = 'true'
+                )
+            END,
+            'sku',(
+               SELECT  DISTINCT jsonb_build_object(
+                     'uuid', ps."uuid",
+                     'sku', ps."sku",
+                     'oldPrice', ps."oldPrice",
+                     'currentPrice', ps."currentPrice",
+                     'media', (
+                        SELECT jsonb_agg(DISTINCT jsonb_build_object(
+                           'url', psm."url",
+                           'width', psm."width",
+                           'height', psm."height",
+                           'size', psm."size",
+                           'mime', psm."mime",
+                           'name', psm."name"
+                        ))
+                        FROM "Media" psm
+                        WHERE psm."mediaableId" = ps."id" 
+                        AND psm."mediaableType" = 'ProductSku' AND psm."default"='true'
+                     ),
+                     'attributeOptions', (
+                        SELECT jsonb_agg(DISTINCT jsonb_build_object(
+                            'attribute', a."title",
+                            'value', o."value"
+                        ))
+                        FROM "SkuVariations" sv
+                        JOIN "ProductVariantValues" pvv ON sv."ProductVariantValueId" = pvv."id"
+                        JOIN "Options" o ON pvv."OptionId" = o."id"
+                        JOIN "Attributes" a ON pvv."AttributeId" = a."id"
+                        WHERE sv."ProductSkuId" = ps."id"
+                    )
+               )
+             From "ProductSkus" ps WHERE ci."ProductSkuId"=ps."id"
+         )
+        )
+    ) AS "products"
+FROM public."CartItem" as ci
+JOIN "Cart" as c ON ci."CartId" = c."id"
+LEFT JOIN "Users" as u ON c."UserId" = u."id"
+JOIN "Products" as p ON ci."ProductId" = p."id"
+LEFT JOIN "ProductSkus" as psk ON ci."ProductSkuId" = psk."id"
+LEFT JOIN "SkuVariations" as sv ON sv."ProductSkuId" = psk."id"
+LEFT JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
+LEFT JOIN "Options" as o ON pvv."OptionId" = o."id"
+LEFT JOIN "Attributes" as a ON pvv."AttributeId" = a."id"
+WHERE c."id"=${_cart?.id}
+GROUP BY
+    u."firstName",
+    u."lastName",
+    u."phone",
+    c."uuid", 
+    c."subTotal",
+    c."taxAmount",
+    c."shippingCost",
+    c."totalPrice", 
+    c."discountAmount", 
+    c."status", 
+    c."createdAt";
+  `;
+  let data = null;
+  const has_cart_access =
+    !_cart?.UserId || _user?.id === _cart.UserId ? true : false;
+  if (_cart && has_cart_access && _cart.status === "IN_CART") {
+    const [cartData] = await sequelize.query(query, {
+      type: QueryTypes.RAW,
+    });
+    data = cartData;
+  } else {
+    const cartBody: any = {
+      discountAmount: 0,
+      totalPrice: 0,
+      shippingCost: 0,
+      subTotal: 0,
+      taxAmount: 0,
+      status: "IN_CART",
+    };
+    if (payload.user && _user && _user?.id) {
+      cartBody["UserId"] = _user.id;
+    }
+    _cart = await Cart.create(cartBody);
+    data = _cart;
+  }
+
+  return {
+    _cart,
+    data,
+  };
 };

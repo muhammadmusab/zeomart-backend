@@ -129,7 +129,7 @@ export const Delete = async (
 
 export const List = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { limit, offset } = getPaginated(req.query);
+    const { limit, offset, page } = getPaginated(req.query);
     // sortBy
     const sortBy = req.query.sortBy ? req.query.sortBy : "createdAt";
     const sortAs = req.query.sortAs ? (req.query.sortAs as string) : "DESC";
@@ -161,7 +161,7 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     if (productSku && _productSku?.id) {
       where.ProductSkuId = _productSku.id;
     }
-    
+
     let reviewWhere = `pr."ProductId"=${_product?.id}`;
     if (productSku?.id) {
       reviewWhere += ` AND pr."ProductSku"=${_productSku?.id}`;
@@ -172,6 +172,7 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
            JOIN "Users" as u ON u."id" = pr."UserId"
            JOIN "Auth" as a ON a."UserId" = u."id"
            WHERE ${reviewWhere}
+           LIMIT ${limit} OFFSET ${offset}
     `;
 
     const groupRatingQuery = `
@@ -192,9 +193,14 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     });
     const average = await ProductReview.findAll({
       where,
-      attributes: [[sequelize.fn("ROUND",sequelize.fn("AVG", Sequelize.col("rating"))), "average"]],
+      attributes: [
+        [
+          sequelize.fn("ROUND", sequelize.fn("AVG", Sequelize.col("rating"))),
+          "average",
+        ],
+      ],
     });
-   
+    const nextPage = offset + limit >= total ? null : page + 1;
     res.send({
       message: "Success",
       data: {
@@ -203,6 +209,7 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
         averageRating: average,
       },
       total,
+      nextPage,
     });
   } catch (error: any) {
     console.log(error.message);

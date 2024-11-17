@@ -19,7 +19,6 @@ const router = express.Router();
 router.post(
   "/create",
   authMiddleware(UserType.VENDOR),
-  // uploadMiddleware().single("image"),
   validate(createUpdateCategorySchema),
   Create
 );
@@ -27,7 +26,6 @@ router.post(
 router.patch(
   "/update/:uid",
   authMiddleware(UserType.VENDOR),
-  // uploadMiddleware().single("image"),
   validate(createUpdateCategorySchema),
   Update
 );
@@ -42,13 +40,12 @@ router.delete(
   "/delete/:uid",
   validate(deleteCategorySchema),
   authMiddleware(UserType.VENDOR),
-
   Delete
 );
 
 router.post(
   "/upload",
-  uploadMiddleware().array("media",1),
+  uploadMiddleware().single('media'), 
   authMiddleware(UserType.VENDOR),
   Upload()
 );

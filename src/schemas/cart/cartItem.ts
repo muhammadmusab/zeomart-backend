@@ -5,11 +5,11 @@ import * as yup from 'yup'
 export const createUpdateCartItemSchema = yup.object({
   body: yup.object({
     quantity:yup.number().required(), // of single product...
-    productUniqueId:yup.string().uuid().required(),
-    cartUniqueId:yup.string().uuid().required(),//
-    productSkuUniqueId:yup.string().uuid(), // if product sku unique id has different variants.
-    cartItemUniqueId:yup.string().uuid(),
-    productImageUniqueId:yup.string().uuid(),
+    product:yup.string().uuid().required(),
+    cart:yup.string().uuid().required(),//
+    productSku:yup.string().uuid(), // if product sku unique id has different variants.
+    cartItem:yup.string().uuid(),
+    media:yup.string().uuid(),
   }),
 });
 

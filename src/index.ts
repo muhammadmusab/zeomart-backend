@@ -50,7 +50,7 @@ app.use(cors());
 // ASSOCIATIONS
 import "./utils/associations";
 app.use("/media", express.static(path.join(__dirname, "media")));
-
+app.use(express.text());
 // Routes
 import authRoutes from "./routes/auth";
 import userRoutes from "./routes/user";
@@ -68,6 +68,8 @@ import optionRoutes from "./routes/option";
 import productSkuRoutes from "./routes/product/productSku";
 import productReviewRoutes from "./routes/product/productReview";
 import productFavouritesRoutes from "./routes/product/productFavourites";
+import productQuestionRoutes from "./routes/product/productQuestion";
+import productAnswerRoutes from "./routes/product/productAnswer";
 // cart
 import cartRoutes from "./routes/cart/cart";
 import cartItemRoutes from "./routes/cart/cartItem";
@@ -99,11 +101,13 @@ app.use("/v1/api/product", productRoutes);
 app.use("/v1/api/product/review", productReviewRoutes);
 app.use("/v1/api/product/sku", productSkuRoutes);
 app.use("/v1/api/product/variant", productVariantRoutes);
-app.use("/v1/api/product/favourites", productFavouritesRoutes);
+app.use("/v1/api/product/wishlist", productFavouritesRoutes);
+app.use("/v1/api/product/question", productQuestionRoutes);
+app.use("/v1/api/product/answer", productAnswerRoutes);
 
 // cart
-// app.use('/v1/api/cart', cartRoutes);
-// app.use('/v1/api/cart-item', cartItemRoutes);
+app.use('/v1/api/cart', cartRoutes);
+app.use('/v1/api/cart-item', cartItemRoutes);
 
 //coupon
 // app.use('/v1/api/coupon',couponRoutes);
@@ -124,7 +128,7 @@ const limiter = rateLimit({
 });
 
 // Apply the rate limiting middleware to all requests
-app.use(limiter);
+// app.use(limiter);
 try {
   sequelize.authenticate().then(() => {
     // await sequelize.sync({alter:true})

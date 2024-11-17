@@ -2,7 +2,9 @@ import { Request, Response, NextFunction } from "express";
 import { BadRequestError } from "../../utils/api-errors";
 import { Product } from "../../models/Product";
 import { ProductQuestion } from "../../models/ProductQuestion";
-import { ProductAnswer } from "../../models/ProductAnswer";
+import { Op } from "sequelize";
+import { User } from "../../models/User";
+import { isValidUUID } from "../../utils/is-valid-uuid";
 
 export const Create = async (
   req: Request,
@@ -10,25 +12,47 @@ export const Create = async (
   next: NextFunction
 ) => {
   try {
-    const { question, product }: { question: string; product: string } =
-      req.body;
+    const user = req.user.User?.uuid;
+    const vendor = req.user.Vendor?.uuid;
+    const _user = await User.findOne({ where: { uuid: user } });
+    const {
+      question,
+      product,
+      answer,
+    }: { question: string; answer?: string; product: string } = req.body;
+
+    const { uid } = req.params;
     const _product: any = await Product.scope("withId").findOne({
       where: {
         uuid: product,
       },
     });
-    const _productQuestion = await ProductQuestion.create({
-      ProductId: _product?.id,
-      question,
-    });
-
-    delete _productQuestion.dataValues.AnswerId;
-    delete _productQuestion.dataValues.id;
-    delete _productQuestion.dataValues.ProductId;
-    res.status(201).send({
-      message: "Success",
-      data: _productQuestion,
-    });
+    if (user && _product?.id && _user && question) {
+      const _productQuestion = await ProductQuestion.create({
+        ProductId: _product?.id,
+        question,
+        UserId: _user?.id,
+      });
+      delete _productQuestion.dataValues.id;
+      delete _productQuestion.dataValues.ProductId;
+      res.status(201).send({
+        message: "Success",
+        data: _productQuestion,
+      });
+    } else if (answer && vendor && uid && isValidUUID(uid)) {
+      //answer
+      const _question = await ProductQuestion.findOne({
+        where: {
+          uuid: uid,
+        },
+      });
+      if (_question) {
+        _question.answer = answer;
+        await _question?.save();
+      }
+      await _question?.reload();
+      res.send({ message: "Success", data: _question });
+    }
   } catch (error: any) {
     next(error);
   }
@@ -39,7 +63,7 @@ export const Update = async (
   next: NextFunction
 ) => {
   try {
-    const { question }: { question: string } = req.body;
+    const { answer }: { answer: string } = req.body;
     const { uid } = req.params;
 
     const _productQuestion = await ProductQuestion.findOne({
@@ -52,7 +76,7 @@ export const Update = async (
       return res.status(404).send({ message: "Data not found" });
     }
 
-    _productQuestion.question = question;
+    _productQuestion.answer = answer;
     await _productQuestion.save();
     await _productQuestion.reload();
 
@@ -69,18 +93,11 @@ export const Delete = async (
   try {
     const { uid } = req.params;
 
-    const _productQuestion = await ProductQuestion.findOne({
+    await ProductQuestion.destroy({
       where: {
         uuid: uid,
       },
     });
-    if (_productQuestion) {
-      await ProductAnswer.destroy({
-        where: {
-          ProductId: _productQuestion.ProductId,
-        },
-      });
-    }
     res.send({ message: "Success" });
   } catch (error) {
     next(error);
@@ -94,53 +111,58 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
       where: {
         uuid: uid,
       },
-      attributes:{
-        exclude:['id','ProductId','AnswerId']
+      attributes: {
+        exclude: ["id", "ProductId", "UserId"],
       },
       include: [
         {
-          model: ProductAnswer,
-          attributes:{
-            exclude:['id','ProductId']
+          model: User,
+          as: "askedby",
+          attributes: {
+            exclude: ["id"],
           },
         },
       ],
     });
 
     if (!_productQuestion) {
-     return  res.status(404).send({ message: "Data not found" });
+      return res.status(404).send({ message: "Data not found" });
     }
-    res.send({message:"Success",data:_productQuestion})
+    res.send({ message: "Success", data: _productQuestion });
   } catch (error) {
     next(error);
   }
 };
 export const List = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const {uid}=req.params
-    const _product=await Product.scope('withId').findOne({
-        where:{
-            uuid:uid
-        }
-    })
-    const _productQuestion = await ProductQuestion.findAll({
-        where: {
-          ProductId: _product?.id,
-        },
-        attributes:{
-          exclude:['id','ProductId','AnswerId']
-        },
-        include: [
-          {
-            model: ProductAnswer,
-            attributes:{
-              exclude:['id','ProductId']
-            },
-          },
-        ],
-      });
+    const { uid } = req.params;
 
-    res.send({ message: "Success", _productQuestion });
+    const _product = await Product.scope("withId").findOne({
+      where: {
+        uuid: uid,
+      },
+    });
+
+    const { count, rows } = await ProductQuestion.findAndCountAll({
+      where: {
+        ProductId: _product?.id,
+      },
+      attributes: {
+        exclude: ["id", "ProductId", "UserId"],
+      },
+      include: [
+        {
+          model: User,
+          as: "askedby",
+        },
+        {
+          model: Product,
+          as: "product",
+        },
+      ],
+    });
+    console.log(JSON.stringify(rows));
+    res.send({ message: "Success", data: rows, total: count });
   } catch (error: any) {
     next(error);
   }

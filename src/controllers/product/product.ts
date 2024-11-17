@@ -126,8 +126,9 @@ export const Create = async (
 
       const product = await Product.create({ ...body });
 
-      media?.map(async (item: any) => {
+      media?.map(async (item: any, i: number) => {
         await Media.create({
+          default: i === 0 ? true : false,
           url: item?.url,
           width: item?.width,
           height: item?.height,
@@ -160,8 +161,9 @@ export const Create = async (
             }
             let productSku = await ProductSkus.create(payload);
             await Promise.all(
-              mediaArray.map(async (mediaObj: any) => {
+              mediaArray.map(async (mediaObj: any, i: number) => {
                 let imagePayload = {
+                  default: i === 0 ? true : false,
                   url: mediaObj?.url,
                   width: mediaObj?.width,
                   height: mediaObj?.height,
@@ -239,9 +241,10 @@ export const Update = async (
       if (validBody?.media?.length) {
         const ProductId = _product.id;
         await Promise.all(
-          validBody?.media.map(async (item: any) => {
+          validBody?.media.map(async (item: any, i: number) => {
             if (!item.uuid) {
               let imagePayload = {
+                default: i === 0 ? true : false,
                 url: item?.url,
                 width: item?.width,
                 height: item?.height,
@@ -316,10 +319,10 @@ export const Update = async (
               }
               if (item?.media?.length) {
                 await Promise.all(
-                  item?.media.map(async (mediaObj: any) => {
-                    console.log(_productSkuId);
+                  item?.media.map(async (mediaObj: any, i: number) => {
                     if (!mediaObj.uuid) {
                       let imagePayload = {
+                        default: i == 0 ? true : false,
                         url: mediaObj?.url,
                         width: mediaObj?.width,
                         height: mediaObj?.height,
@@ -460,7 +463,7 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
       let productVariantValuesIds = _productVariantValues.map(
         (item) => item.id
       );
-      console.log(productVariantValuesIds);
+    
       _productSku = await SkuVariations.findAll({
         where: {
           combinationIds: {
@@ -476,7 +479,7 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
       _productSku = {
         id: _productSku[0],
       };
-      console.log("product sku ------obj", _productSku);
+  
     } else {
       _productSku = await ProductSkus.findOne({
         where: {
@@ -485,33 +488,34 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
         },
       });
     }
-
+    
     let productWhere = `p."uuid"='${uid}'`;
     let having = ``;
     let productSkuWhere = `ps."ProductId"='${ProductId}'`;
     if (_productSku) {
       productSkuWhere += ` AND ps."id"='${_productSku.id}'`;
     }
-    let reviewWhere=`WHERE "ProductId"=${ProductId}`
-    
-    if(_productSku){
-      reviewWhere+=` AND "ProductSkuId"=${_productSku.id}`
+    let reviewWhere = `WHERE "ProductId"=${ProductId}`;
+
+    if (_productSku) {
+      reviewWhere += ` AND "ProductSkuId"=${_productSku.id}`;
     }
-    const productReviewQuery=`Select json_build_object(
+    const productReviewQuery = `Select json_build_object(
     'total',COUNT(DISTINCT pr."id"),
     'average', COALESCE(ROUND(CAST(AVG(pr."rating") AS NUMERIC), 1), 0)
     ) as "rating" from "ProductReview" as pr
      ${reviewWhere}
-    `
+    `;
     const productQuery = `
     SELECT p."uuid",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."hasVariants",p."createdAt",
-     json_build_object('title',c."title",'slug',c."slug") as "category"
+     json_build_object('title',c."title",'slug',c."slug") as "category",
+     jsonb_build_object('uuid',f."uuid",'state',f."state") as "wishlist"
     FROM public."Products" as p
       LEFT JOIN "Categories" as c ON p."CategoryId" = c."id"
+     LEFT JOIN "Favourites" as f ON f."ProductId" = p."id"
     WHERE ${productWhere}
-    GROUP BY p."uuid",p."hasVariants",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",c."title",c."slug"`;
+    GROUP BY p."uuid",p."hasVariants",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",c."title",c."slug",f."uuid",f."state"`;
 
-    console.log('productQuery------',productQuery)
 
     const productMediaQuery = `
     SELECT  pm."uuid","url","width","height","size","mime","name" from "Media" as pm
@@ -536,15 +540,16 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
       array_agg(
         DISTINCT jsonb_build_object (
         'uuid',psm."uuid",'url',psm."url",'width', psm."width",'height', psm."height",'size', psm."size",'mime', psm."mime",'name', psm."name"
-      )) as "media"
+      )) as "media",jsonb_build_object('uuid',f."uuid",'state',f."state") as "wishlist"
       FROM "SkuVariations" as sv
           JOIN "ProductSkus" as ps ON sv."ProductSkuId" = ps."id"
+          LEFT JOIN "Favourites" as f ON f."ProductSkuId" = ps."id"
           JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
           JOIN "Options" as o ON pvv."OptionId" = o."id"
           JOIN "Attributes" as a ON pvv."AttributeId" = a."id"
           JOIN "Media" as psm ON psm."mediaableId"=ps."id" AND psm."mediaableType"='ProductSku'
       WHERE ${productSkuWhere}
-      GROUP BY  ps."uuid",ps."sku",ps."oldPrice",ps."currentPrice",ps."quantity",ps."uuid",ps."isDefault"`;
+      GROUP BY  ps."uuid",ps."sku",ps."oldPrice",ps."currentPrice",ps."quantity",ps."isDefault",f."uuid",f."state"`;
 
       // let attributeOptions = `
       // SELECT json_build_object('uuid', a."uuid",'title',a."title",'type',a."type") as "attribute",
@@ -593,6 +598,8 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
       const [attributeOptionsData] = await sequelize.query(attributeOptions, {
         type: QueryTypes.RAW,
       });
+
+      
       data = {
         // @ts-expect-error
         ...productData[0],
@@ -600,25 +607,25 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
         ...productReviewData?.[0],
         media: productMediaData,
         skus: productSkuData,
-        
+
         attributeOption: attributeOptionsData,
       };
     } else {
       data = {
         // @ts-expect-error
         ...productData[0],
-       // @ts-expect-error
-       ...productReviewData?.[0],
+        // @ts-expect-error
+        ...productReviewData?.[0],
         media: productMediaData,
       };
     }
-    console.log(JSON.stringify(productData));
+
     res.send({
       message: "Success",
       data,
     });
   } catch (error: any) {
-    console.log("error", error);
+    console.log("error", error.message);
     res.status(500).send({ message: error.message });
   }
 };
@@ -909,18 +916,20 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
                 'average', COALESCE(ROUND(CAST(AVG(pr."rating") AS NUMERIC), 1), 0)
                 ) as "rating",
                  json_build_object('title',c."title",'slug',c."slug") as "category",
-                 json_build_object('uuid',ps."uuid",'sku',ps."sku",'oldPrice',ps."oldPrice",'currentPrice',ps."currentPrice",'quantity',ps."quantity",'isDefault',ps."isDefault") as "sku"
+                 json_build_object('uuid',ps."uuid",'sku',ps."sku",'oldPrice',ps."oldPrice",'currentPrice',ps."currentPrice",'quantity',ps."quantity",'isDefault',ps."isDefault") as "sku",
+                 jsonb_build_object('uuid',f."uuid",'state',f."state") as "wishlist"
                 FROM public."Products" as p
                    LEFT  JOIN "Media" as pm ON pm."mediaableId" = p."id" AND pm."mediaableType"='Product'
                    LEFT  JOIN "Categories" as c ON p."CategoryId" = c."id"
                    LEFT  JOIN "ProductSkus" as ps ON ps."ProductId" = p."id"
+                   LEFT  JOIN "Favourites" as f ON f."ProductId" = p."id" OR (f."ProductSkuId" IS NOT NULL AND f."ProductSkuId" = ps."id")
                    LEFT  JOIN "SkuVariations" as sv ON sv."ProductId" = p."id"
                    LEFT  JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
                    LEFT  JOIN "Options" as o ON pvv."OptionId" = o."id"
                    LEFT  JOIN "Attributes" as a ON pvv."AttributeId" = a."id"
                    LEFT  JOIN "ProductReview" as pr ON pr."ProductId" = p."id"
                 WHERE (ps."isDefault" = TRUE OR ps."id" IS NULL) ${Querywhere}
-                GROUP BY p."uuid",p."hasVariants",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",c."title",c."slug",ps."uuid",ps."sku",ps."oldPrice",ps."currentPrice",ps."quantity",ps."uuid",ps."isDefault"
+                GROUP BY p."uuid",p."hasVariants",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",c."title",c."slug",ps."uuid",ps."sku",ps."oldPrice",ps."currentPrice",ps."quantity",ps."uuid",ps."isDefault",f."uuid",f."state"
                 ${orderBY}
                 ${having}
                 LIMIT ${limit} OFFSET ${offset}

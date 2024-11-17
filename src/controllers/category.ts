@@ -238,13 +238,15 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     // sortBy
     const sortBy = req.query.sortBy ? req.query.sortBy : "createdAt";
     const sortAs = req.query.sortAs ? (req.query.sortAs as string) : "DESC";
-    const showChildren =
-      req.query.showSubcategories?.toString().toLocaleLowerCase().trim() ===
-      "true"
+ 
+    // level of deep subcategories
+    // const levels = req.query.levels ? req.query.levels : 1;
+    //@ts-expect-error
+    const { levels = 1, showSubcategories } = req.filter;
+    let showChildren =
+      showSubcategories?.toString().toLocaleLowerCase().trim() === "true"
         ? true
         : false;
-    // level of deep subcategories
-    const levels = req.query.levels ? req.query.levels : 1;
     const { include } = addIncludeLevels(levels as number, showChildren);
     const where: { uuid?: string; title?: any } = {};
     if (title) {

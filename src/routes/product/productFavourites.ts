@@ -7,33 +7,34 @@ import {
  listProductFavouritesSchema,
  getProductFavouritesSchema
 } from "../../schemas/product/productFavourites";
-import { CreateUpdate,Get, List, Delete } from "../../controllers/product/productFavourites";
+import { CreateUpdate ,List} from "../../controllers/product/productFavourites";
 import { validate } from "../../middlewares/validate-middleware";
 import authMiddleware from "../../middlewares/auth-middleware";
+import { UserType } from "../../types/model-types";
 const router = express.Router();
 router.post(
-  "/create",
+  "/toggle",
   validate(createUpdateProductFavouritesSchema),
-  authMiddleware(),
+  authMiddleware(UserType.USER),
   CreateUpdate
 );
 
-router.delete(
-  "/delete/:uid",
-  validate(deleteProductFavouritesSchema),
-  basicAuthMiddleware,
-  Delete
-);
-router.post(
-  "/get",
-  validate(getProductFavouritesSchema),
-  basicAuthMiddleware,
-  Get
-);
+// router.delete(
+//   "/delete/:uid",
+//   validate(deleteProductFavouritesSchema),
+//   basicAuthMiddleware,
+//   Delete
+// );
+// router.post(
+//   "/get",
+//   validate(getProductFavouritesSchema),
+//   basicAuthMiddleware,
+//   Get
+// );
 router.get(
   "/list",
   validate(listProductFavouritesSchema),
-  basicAuthMiddleware,
+  authMiddleware(UserType.USER),
   List
 );
 export default router;

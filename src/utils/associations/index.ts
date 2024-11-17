@@ -18,9 +18,9 @@ import { Option } from "../../models/Options";
 import { FilterOption } from "../../models/FilterOption";
 import { ProductReview } from "../../models/ProductReview";
 import { ProductQuestion } from "../../models/ProductQuestion";
-import { ProductAnswer } from "../../models/ProductAnswer";
-
-
+import { Cart } from "../../models/Cart";
+import { CartItem } from "../../models/CartItem";
+import { Favourites } from "../../models/Favourites";
 
 //-------self referencial tables---------
 
@@ -49,7 +49,7 @@ FilterCategory.belongsTo(Filter);
 
 //-------------------Product relations
 Category.hasMany(Product);
-Product.belongsTo(Category,{as:"category",foreignKey:"CategoryId"}); //categoryId in Product table
+Product.belongsTo(Category, { as: "category", foreignKey: "CategoryId" }); //categoryId in Product table
 
 User.hasMany(Auth, { onDelete: "CASCADE" });
 Auth.belongsTo(User); // UserId in Auth Table
@@ -75,11 +75,10 @@ Product.belongsTo(Vendor);
 Vendor.hasMany(Social);
 Social.belongsTo(Vendor);
 
-
 //---- PRODUCT SKU TABLE
 
 // ProductSkus relation with product
-Product.hasMany(ProductSkus, {as:"skus", onDelete: "CASCADE" });
+Product.hasMany(ProductSkus, { as: "skus", onDelete: "CASCADE" });
 ProductSkus.belongsTo(Product); //productId in ProductSkus table
 
 //---- SKU VARIATION TABLE (ProductId,ProductSkuId,ProductVariantValueId) in variation table
@@ -104,7 +103,6 @@ Product.hasMany(Media, {
     mediaableType: "Product",
   },
 });
-
 Category.hasMany(Media, {
   as: "media",
   foreignKey: "mediaableId",
@@ -116,7 +114,6 @@ Category.hasMany(Media, {
     mediaableType: "Category",
   },
 });
-
 ProductSkus.hasMany(Media, {
   as: "media",
   foreignKey: "mediaableId",
@@ -127,7 +124,6 @@ ProductSkus.hasMany(Media, {
     mediaableType: "ProductSku",
   },
 });
-
 Media.belongsTo(Product, {
   foreignKey: "mediaableId",
   constraints: false,
@@ -148,20 +144,23 @@ Media.belongsTo(ProductSkus, {
   onDelete: "CASCADE",
 });
 
-
 Option.hasMany(Product);
-Product.belongsTo(Option,{as:"brand",foreignKey:"OptionId"}); //OptionId in Product table
+Product.belongsTo(Option, { as: "brand", foreignKey: "OptionId" }); //OptionId in Product table
 
-Option.hasMany(ProductVariantValues,{as:'options'});
-ProductVariantValues.belongsTo(Option,{as:'options',foreignKey:"OptionId"}); //OptionId in ProductVariantValue table
+Option.hasMany(ProductVariantValues, { as: "options" });
+ProductVariantValues.belongsTo(Option, {
+  as: "options",
+  foreignKey: "OptionId",
+}); //OptionId in ProductVariantValue table
 
-Attribute.hasMany(ProductVariantValues,{as:'attribute'});
-ProductVariantValues.belongsTo(Attribute,{as:'attribute',foreignKey:"AttributeId"}); //AttributeId in ProductVariantValue table
+Attribute.hasMany(ProductVariantValues, { as: "attribute" });
+ProductVariantValues.belongsTo(Attribute, {
+  as: "attribute",
+  foreignKey: "AttributeId",
+}); //AttributeId in ProductVariantValue table
 
-
-Attribute.hasMany(Option,{as: "options"});
+Attribute.hasMany(Option, { as: "options" });
 Option.belongsTo(Attribute); //AttributeId in Option table
-
 
 // FilterOption
 Option.belongsToMany(Filter, { as: "filters", through: FilterOption });
@@ -171,24 +170,49 @@ FilterOption.belongsTo(Option);
 Filter.hasMany(FilterOption);
 FilterOption.belongsTo(Filter);
 
-
-Attribute.hasMany(Filter,{as: "filters"});
-Filter.belongsTo(Attribute,{as:"attribute",foreignKey:"AttributeId"}); //AttributeId in Filter table
-
+Attribute.hasMany(Filter, { as: "filters" });
+Filter.belongsTo(Attribute, { as: "attribute", foreignKey: "AttributeId" }); //AttributeId in Filter table
 
 // REVIEWS
-Product.hasMany(ProductReview, { as:"rating", onDelete: "CASCADE" });
+Product.hasMany(ProductReview, { as: "rating", onDelete: "CASCADE" });
 ProductReview.belongsTo(Product); // ProductId in Review Table
-ProductSkus.hasMany(ProductReview, { as:"rating", onDelete: "CASCADE" });
+ProductSkus.hasMany(ProductReview, { as: "rating", onDelete: "CASCADE" });
 ProductReview.belongsTo(ProductSkus); // ProductId in Review Table
-User.hasMany(ProductReview, { as:"rating", onDelete: "CASCADE" });
+User.hasMany(ProductReview, { as: "rating", onDelete: "CASCADE" });
 ProductReview.belongsTo(User); // UserId in Review Table
 
-
 // FAQ
-Product.hasMany(ProductQuestion, { as:"question", onDelete: "CASCADE" });
-ProductQuestion.belongsTo(Product); // ProductId in Question Table
-ProductAnswer.hasMany(ProductQuestion, { as:"question", onDelete: "CASCADE" });
-ProductQuestion.belongsTo(ProductAnswer); // AnswerId in Question Table
-Product.hasMany(ProductAnswer, { as:"answer", onDelete: "CASCADE" });
-ProductAnswer.belongsTo(Product); // ProductId in Answer Table
+Product.hasMany(ProductQuestion, { as: "question", onDelete: "CASCADE" });
+ProductQuestion.belongsTo(Product, { as: "product", foreignKey: "ProductId" }); // ProductId in Question Table
+
+User.hasMany(ProductQuestion, { as: "question", onDelete: "CASCADE" });
+ProductQuestion.belongsTo(User, { as: "askedby", foreignKey: "UserId" }); // UserId in Question Table
+
+// CART
+User.hasMany(Cart, { as: "cart" });
+Cart.belongsTo(User, { as: "user", foreignKey: "UserId" }); //UserId in Cart table
+
+Cart.hasMany(CartItem, { as: "cartItems" });
+CartItem.belongsTo(Cart, { as: "cart", foreignKey: "CartId" }); //CartId in CartItem table
+
+Product.hasMany(CartItem, { as: "cartItems" });
+CartItem.belongsTo(Product, { as: "product", foreignKey: "ProductId" }); //ProductId in CartItem table
+
+ProductSkus.hasMany(CartItem, { as: "cartItems" });
+CartItem.belongsTo(ProductSkus, { as: "sku", foreignKey: "ProductSkuId" }); //ProductSkuId in CartItem table
+
+Vendor.hasMany(CartItem, { as: "cartItems" });
+CartItem.belongsTo(Vendor, { as: "vendor", foreignKey: "VendorId" });
+
+// Media.hasMany(CartItem,{as: "cartItem"});
+// CartItem.belongsTo(Media,{as:'media',foreignKey:"MediaId"}); //MediaId in CartItem table
+
+// Favorites
+Product.hasMany(Favourites, { as: "favourite" });
+Favourites.belongsTo(Product, { as: "product", foreignKey: "ProductId" }); //ProductId in favourite
+
+ProductSkus.hasMany(Favourites, { as: "favourite" });
+Favourites.belongsTo(ProductSkus, { as: "sku", foreignKey: "ProductSkuId" }); //ProductSkuId in favourite
+
+User.hasMany(Favourites, { as: "favourite" });
+Favourites.belongsTo(User, { as: "user", foreignKey: "UserId" }); //UserId in favourite

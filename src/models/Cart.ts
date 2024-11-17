@@ -15,7 +15,11 @@ interface CartModel
   id?: CreationOptional<number>;
   uuid: CreationOptional<string>;
   totalPrice?: number;
-  status?:string;
+  subTotal: number;
+  taxAmount: number;
+  shippingCost: number;
+  discountAmount: number;
+  status?: string;
   UserId?: CreationOptional<number>;
 }
 export const Cart = sequelize.define<CartModel>(
@@ -30,9 +34,22 @@ export const Cart = sequelize.define<CartModel>(
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false,
     },
+    subTotal: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+    },
+    taxAmount: {
+      type: DataTypes.DECIMAL(12, 2),
+    },
+    shippingCost: {
+      type: DataTypes.DECIMAL(12, 2),
+    },
+    discountAmount: {
+      type: DataTypes.DECIMAL(12, 2),
+    },
     status: {
       type: DataTypes.STRING,
-      defaultValue:"PENDING"
+      defaultValue: "PENDING",
     },
     UserId: {
       type: DataTypes.INTEGER,
