@@ -23,6 +23,7 @@ interface MediaModel
   name: string;
   mediaableType: string;
   mediaableId?: number;
+  default?: boolean;
 }
 export const Media = sequelize.define<MediaModel>(
   "Media",
@@ -62,10 +63,14 @@ export const Media = sequelize.define<MediaModel>(
       type: DataTypes.INTEGER, // stores the product/category id
       allowNull: false,
     },
+    default: {
+      type: DataTypes.BOOLEAN,
+      defaultValue:false,
+    },
   },
   {
     defaultScope: {
-      attributes: { exclude: ["id", "mediaableId"] },
+      attributes: { exclude: [] },
     },
     scopes: {
       withId: {

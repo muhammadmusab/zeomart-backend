@@ -6,6 +6,7 @@ import {
   Get,
   Delete,
   List,
+  setDefaultVariant,
 } from "../../controllers/product/productSku";
 import { validate } from "../../middlewares/validate-middleware";
 import {
@@ -14,9 +15,11 @@ import {
   getProductSkuSchema,
   updateProductSkuSchema,
   listProductSkuSchema,
+  setDefaultVariantSchema,
 } from "../../schemas/product/productSku";
 import authMiddleware from "../../middlewares/auth-middleware";
 import { UserType } from "../../types/model-types";
+import filtersMiddleware from "../../middlewares/filters-middleware";
 
 const router = express.Router();
 
@@ -45,7 +48,12 @@ router.delete(
   authMiddleware(UserType.VENDOR),
   Delete
 );
-
-router.get("/list/:uid", validate(listProductSkuSchema), List);
+router.post(
+  "/set-default",
+  validate(setDefaultVariantSchema),
+  authMiddleware(UserType.VENDOR),
+  setDefaultVariant
+);
+router.get("/list/:uid", filtersMiddleware, validate(listProductSkuSchema), List);
 
 export default router;

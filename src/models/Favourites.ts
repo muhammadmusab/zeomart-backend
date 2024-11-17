@@ -16,7 +16,7 @@ interface FavouritesModel
   uuid: CreationOptional<string>;
   state?: boolean;
 
-  ProductVariantValueId?: CreationOptional<number | null>;
+  ProductSkuId?: CreationOptional<number | null>;
   ProductId?: number;
   UserId?: number;
 }
@@ -32,20 +32,19 @@ export const Favourites = sequelize.define<FavouritesModel>(
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },
-    ProductVariantValueId: {
-      type: DataTypes.INTEGER,
-      references: {
-        model: "ProductVariantValues",
-        key: "id",
-      },
-    },
     ProductId: {
       type: DataTypes.INTEGER,
       references: {
         model: "Products",
         key: "id",
       },
-      allowNull: false,
+    },
+    ProductSkuId: {
+      type: DataTypes.INTEGER,
+      references: {
+        model: "ProductSkus",
+        key: "id",
+      },
     },
     UserId: {
       type: DataTypes.INTEGER,
@@ -60,7 +59,7 @@ export const Favourites = sequelize.define<FavouritesModel>(
     freezeTableName: true,
     defaultScope: {
       attributes: {
-        exclude: ["id", "ProductVariantValueId", "ProductId", "UserId"],
+        exclude: ["id", "ProductSkuId", "ProductId", "UserId"],
       },
     },
     scopes: {

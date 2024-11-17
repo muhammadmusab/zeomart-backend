@@ -14,9 +14,9 @@ interface FilterModel
   > {
   id?: CreationOptional<number>;
   uuid: CreationOptional<string>;
-  title: string;
+  AttributeId: number;
   additionalTitle?: CreationOptional<string>;
-  type: string;
+  ui?: CreationOptional<string>;
 }
 export const Filter = sequelize.define<FilterModel>(
   "Filter",
@@ -26,29 +26,31 @@ export const Filter = sequelize.define<FilterModel>(
       defaultValue: UUIDV4,
       unique: true,
     },
-    title: {
-      type: DataTypes.STRING,
+    AttributeId: {
+      type: DataTypes.INTEGER,
       allowNull: false,
-      unique: true,
+      references: {
+        model: "Attributes",
+        key: "id",
+      },
     },
     additionalTitle: {
       type: DataTypes.STRING,
     },
-    type: {
+    ui: {
       type: DataTypes.STRING,
-      allowNull: false,
-    },
+    }
   },
   {
-    defaultScope: {
-      attributes: { exclude: [] },
-    },
-    scopes: {
-      withId: {
-        attributes: {
-          exclude: [],
-        },
-      },
-    },
+    // defaultScope: {
+    //   attributes: { exclude: [] },
+    // },
+    // scopes: {
+    //   withId: {
+    //     attributes: {
+    //       exclude: [],
+    //     },
+    //   },
+    // },
   }
 );

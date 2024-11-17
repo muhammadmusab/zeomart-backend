@@ -1,16 +1,6 @@
 export const getPaginated = (query: any) => {
-  let page;
-  let limit;
-  let offset;
-
-  if (query.page && query.limit) {
-    page = +query?.page as number;
-    limit = +query?.limit as number;
-  } else {
-    page = 1;
-    limit = 10;
-  }
-  offset = limit * (page - 1);
-
-  return { limit, offset };
+  const page = query.page && !isNaN(+query.page) ? +query.page : 1;
+  const limit = query.limit && !isNaN(+query.limit) ? +query.limit : 10;
+  const offset = limit * (page - 1);
+  return { limit, offset ,page};
 };

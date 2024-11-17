@@ -14,29 +14,31 @@ import {
  updateProductReviewSchema,
  listProductReviewSchema
 } from "../../schemas/product/productReview";
+import { UserType } from "../../types/model-types";
+import filtersMiddleware from "../../middlewares/filters-middleware";
 
 const router = express.Router();
 
 router.post(
   "/create",
   validate(createProductReviewSchema),
-  authMiddleware(),
+  authMiddleware(UserType.USER),
   Create
 );
 router.patch(
   "/update/:uid",
   validate(updateProductReviewSchema),
-  authMiddleware(),
+  authMiddleware(UserType.USER),
   Update
 );
 
 router.delete(
   "/delete/:uid",
   validate(deleteProductReviewSchema),
-  basicAuthMiddleware,
+  authMiddleware(UserType.USER),
   Delete
 );
 
-router.get("/list",validate(listProductReviewSchema), List);
+router.get("/list",filtersMiddleware,validate(listProductReviewSchema), List);
 
 export default router;

@@ -3,21 +3,29 @@ import * as yup from "yup";
 export const createProductSchema = yup.object({
   body: yup.object({
     title: yup.string().required(),
-    slug: yup.string(),
+    slug: yup.string().nullable(),
     brand: yup.string().uuid().required(),
     status: yup.string().nullable(),
     hasVariants: yup.boolean(),
+    skus: yup.array(
+      yup.object({
+        sku: yup.string().required(),
+        oldPrice: yup.number().required(),
+        currentPrice: yup.number().required(),
+        quantity: yup.number().required(),
+      })
+    ).nullable(),
     sku: yup
       .string()
       .when("hasVariants", {
         is: false,
         then(schema) {
-          return schema.required();
+          return schema.nullable(); // set to required after checking
         },
       })
       .nullable(),
     quantity: yup
-      .number()
+      .number().nullable()
       .when("hasVariants", {
         is: false,
         then(schema) {
@@ -26,7 +34,7 @@ export const createProductSchema = yup.object({
       })
       .nullable(),
     currentPrice: yup
-      .number()
+      .number().nullable()
       .when("hasVariants", {
         is: false,
         then(schema) {
@@ -35,7 +43,7 @@ export const createProductSchema = yup.object({
       })
       .nullable(),
     oldPrice: yup
-      .number()
+      .number().nullable()
       .when("hasVariants", {
         is: false,
         then(schema) {
@@ -49,31 +57,39 @@ export const createProductSchema = yup.object({
         label: yup.string().required(),
         value: yup.string().required(),
       })
-    ),
-    highlights: yup.string(),
+    ).nullable(),
+    highlights: yup.string().nullable(),
     overview: yup.string().required(),
   }),
 });
 export const updateProductSchema = yup.object({
   body: yup
     .object({
-      title: yup.string(),
-      slug: yup.string(),
+      title: yup.string().nullable(),
+      slug: yup.string().nullable(),
       brand: yup.string().uuid(),
-      status: yup.string(),
-      sku: yup.string(),
-      quantity: yup.number(),
-      currentPrice: yup.number(),
-      oldPrice: yup.number(),
+      status: yup.string().nullable(),
+      sku: yup.string().nullable(),
+      skus: yup.array(  // ProductSkus
+        yup.object({
+          sku: yup.string().required(),
+          oldPrice: yup.number().required(),
+          currentPrice: yup.number().required(),
+          quantity: yup.number().required(),
+        })
+      ).nullable(),
+      quantity: yup.number().nullable(),
+      currentPrice: yup.number().nullable(),
+      oldPrice: yup.number().nullable(),
       category: yup.string().uuid(),
       specifications: yup.array(
         yup.object({
           key: yup.string().required(),
           value: yup.string().required(),
         })
-      ),
-      highlights: yup.string(),
-      overview: yup.string(),
+      ).nullable(),
+      highlights: yup.string().nullable(),
+      overview: yup.string().nullable(),
     })
     .required(),
   params: yup.object({
@@ -89,10 +105,16 @@ export const deleteProductSchema = yup.object({
 export const getProductSchema = yup.object({
   query: yup.object({
     // productVariantValues: yup.array(yup.string().uuid().required()),
-    filter:yup.string()
+    filter: yup.string(),
   }),
   params: yup.object({
     uid: yup.string().uuid().required(),
+  }),
+});
+export const getProductBrandSchema = yup.object({
+  query: yup.object({
+    // productVariantValues: yup.array(yup.string().uuid().required()),
+    search: yup.string(),
   }),
 });
 

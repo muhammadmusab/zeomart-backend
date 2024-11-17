@@ -3,32 +3,21 @@ import * as yup from "yup";
 export const createProductVariantSchema = yup.object({
   body: yup
     .object({
-      productVariantTypeUniqueId: yup.string().uuid().required(),
-      productUniqueId: yup.string().uuid().required(),
-      value: yup.string().required(),
-      oldPrice: yup.number().required(),
-      currentPrice: yup.number().required(),
-      quantity: yup.number().required(),
-      sku: yup.string().required(),
+      productSku: yup.string().uuid().required(),
+      product: yup.string().uuid().required(),
+      attributeOptions: yup
+        .array(
+          yup.object({
+            attribute: yup.string().required(),
+            option: yup.string().required(),
+          })
+        )
+        .min(2)
+        .required(),
     })
     .required(),
 });
-export const assignVariantSchema = yup.object({
-  body: yup
-    .object({
-      productVariantValueUniqueIds: yup.array(yup.string().uuid()).required(),
-      productSkuUniqueId: yup.string().uuid().required(),
-      productUniqueId: yup.string().uuid().required(),
-    })
-    .required(),
-});
-export const setDefaultVariantSchema = yup.object({
-  body: yup
-    .object({
-      productSkuUniqueId: yup.string().uuid().required(),
-    })
-    .required(),
-});
+
 export const updateProductVariantSchema = yup.object({
   body: yup
     .object({
@@ -44,9 +33,8 @@ export const updateProductVariantSchema = yup.object({
 });
 
 export const deleteProductVariantSchema = yup.object({
-  body: yup.object({
-    productVariantValueUniqueId: yup.string().uuid().required(), //uuid of the Product
-    productSkuUniqueId: yup.string().uuid().required(), //uuid of the Product
+  params: yup.object({
+    uid: yup.string().uuid().required(), //uuid of the Product SKu
   }),
 });
 export const getProductVariantSchema = yup.object({
@@ -56,10 +44,10 @@ export const getProductVariantSchema = yup.object({
 });
 export const listProductVariantSchema = yup.object({
   // body: yup.object({
-    // product: yup.string().uuid().required(), // uid of product
-    // productVariantValues: yup.array(yup.string().uuid().required()),
+  // product: yup.string().uuid().required(), // uid of product
+  // productVariantValues: yup.array(yup.string().uuid().required()),
   // }),
-  filter:yup.string(),
+  filter: yup.string(),
   // query: yup.object({
   //   separate: yup.boolean(),
   // }),

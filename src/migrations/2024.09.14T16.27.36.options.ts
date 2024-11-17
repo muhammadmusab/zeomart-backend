@@ -18,6 +18,14 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
       type:DataTypes.STRING,
       unique:true,
     },
+    AttributeId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: "Attributes",
+        key: "id",
+      },
+    },
     createdAt: {
       type: DataTypes.DATE,
     },

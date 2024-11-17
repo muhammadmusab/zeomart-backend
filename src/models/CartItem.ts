@@ -17,9 +17,10 @@ interface CartItemModel
   subTotal?: number;
   quantity?: number;
   ProductId?: number | null;
-  ProductImageId?: number | null;
+  MediaId?: number | null;
   CartId?: number | null;
   ProductSkuId?: number | null;
+  VendorId:number;
 }
 export const CartItem = sequelize.define<CartItemModel>(
   "CartItem",
@@ -53,27 +54,26 @@ export const CartItem = sequelize.define<CartItemModel>(
       },
       allowNull: false,
     },
-    ProductImageId: {
+    VendorId: {
       type: DataTypes.INTEGER,
       references: {
-        model: "ProductImage",
+        model: "Vendors",
         key: "id",
       },
       allowNull: false,
     },
-
     ProductSkuId: {
       type: DataTypes.INTEGER,
       references: {
         model: "ProductSkus",
         key: "id",
       },
-    },
+    }
   },
   {
     freezeTableName: true,
     defaultScope: {
-      attributes: { exclude: ["id", "CartId", "ProductId", "ProductSkuId","ProductImageId"] },
+      attributes: { exclude: [], },
     },
     scopes: {
       withId: {

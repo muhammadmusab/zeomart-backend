@@ -9,7 +9,7 @@ import {
 } from "sequelize";
 import { Media } from "./Media";
 import { ProductSkus } from "./ProductSku";
-import { ProductVariantType } from "./ProductVariantType";
+
 interface ProductModel
   extends Model<
     InferAttributes<ProductModel>,
@@ -30,7 +30,8 @@ interface ProductModel
   VendorId?: number | null;
   sku?: CreationOptional<string>;
   features: Record<string, any>[];
-  BrandId?: number;
+  OptionId?: number;
+  sold?:number;
 }
 export const Product = sequelize.define<ProductModel>(
   "Product",
@@ -92,6 +93,10 @@ export const Product = sequelize.define<ProductModel>(
         }
       },
     },
+    sold:{
+      type: DataTypes.INTEGER,
+      defaultValue:0
+    },
     CategoryId: {
       type: DataTypes.INTEGER,
       references: {
@@ -106,17 +111,17 @@ export const Product = sequelize.define<ProductModel>(
         key: "id",
       },
     },
-    BrandId: {
+    OptionId: {
       type: DataTypes.INTEGER,
       references: {
-        model: "Brands",
+        model: "Options",
         key: "id",
       },
     },
   },
   {
     defaultScope: {
-      attributes: { exclude: ["id", "CategoryId", "VendorId", "BrandId"] },
+      attributes: { exclude: ["id", "CategoryId", "VendorId", "OptionId"] },
     },
     scopes: {
       withId: {
@@ -146,12 +151,6 @@ async function deleteDependecies(product: any, options: any) {
       },
     });
     await ProductSkus.destroy({
-      where: {
-        ProductId: instance?.id,
-      },
-    });
-
-    await ProductVariantType.destroy({
       where: {
         ProductId: instance?.id,
       },

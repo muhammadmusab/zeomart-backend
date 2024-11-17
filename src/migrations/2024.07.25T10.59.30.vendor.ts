@@ -27,6 +27,9 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
     phone: {
       type: DataTypes.STRING,
     },
+    stripeConnectId: {
+      type: DataTypes.STRING,
+    },
     createdAt: {
       type: DataTypes.DATE,
     },

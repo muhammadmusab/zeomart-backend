@@ -8,14 +8,32 @@ const filtersMiddleware = (req: Request, res: Response, next: NextFunction) => {
       const search = qs.parse(req.query.search);
 
       // @ts-expect-error
-      req.search = search;
+      req.search = search??{};
+    }else{
+      // @ts-expect-error
+      req.search={}
     }
     if (req.query.filter) {
       // @ts-expect-error
       const filter = qs.parse(req.query.filter);
 
       // @ts-expect-error
-      req.filter = filter;
+      req.filter = filter??{};
+    }else{
+      // @ts-expect-error
+      req.filter={}
+    }
+    if (req.query.sort) {
+      // @ts-expect-error
+      let sort = qs.parse(req.query.sort);
+      if(!Array.isArray(sort)){
+        sort = Object.values(sort) as any
+      }
+      // @ts-expect-error
+      req.sort = sort??[];
+    }else{
+      // @ts-expect-error
+      req.sort=[]
     }
     next();
   } catch (error) {

@@ -2,49 +2,20 @@ import * as yup from "yup";
 
 export const createFilterSchema = yup.object({
   body: yup.object({
-    title: yup.string().required(),
     type: yup.string().required(),
     additionalTitle: yup.string(),
-    options: yup
-      .array()
-      .of(
-        yup.object().shape({
-          label: yup.string().required(),
-          value: yup.mixed().required(),
-        })
-      )
-      .required()
-      .when("type", {
-        is: "range",
-        then(schema) {
-          return schema.max(2);
-        },
-      }),
-
-    categories: yup.array(yup.string().uuid().required()).required(),
+    attribute: yup.string().uuid().required(),
+    categories: yup.array(yup.string().uuid().required()),
+    options: yup.array(yup.string().uuid().required()).required(),
   }),
 });
 export const updateFilterSchema = yup.object({
   body: yup.object({
-    title: yup.string(),
+    attribute: yup.string().uuid().required(),
     type: yup.string(),
     additionalTitle: yup.string(),
-    options: yup
-      .array()
-      .of(
-        yup.object().shape({
-          label: yup.string().required(),
-          value: yup.mixed().required(),
-        })
-      )
-      .when("type", {
-        is: "range",
-        then(schema) {
-          return schema.max(2);
-        },
-      }),
-
-    categories: yup.array(yup.string().uuid().required()).required(),
+    categories: yup.array(yup.string().uuid().required()),
+    options: yup.array(yup.string().uuid().required()),
   }),
   params: yup.object({
     uid: yup.string().uuid().required(),

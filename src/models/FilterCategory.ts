@@ -43,17 +43,16 @@ export const FilterCategory = sequelize.define<FilterCategoryModel>(
     },
   },
   {
-    defaultScope: {
-    //   attributes: { exclude: ["id", "FilterId", "CategoryId"] },
-      attributes: { exclude: [] },
-    },
-    scopes: {
-      withId: {
-        attributes: {
-          exclude: [],
-        },
-      },
-    },
+    // defaultScope: {
+    //   attributes: { exclude: [] },
+    // },
+    // scopes: {
+    //   withId: {
+    //     attributes: {
+    //       exclude: [],
+    //     },
+    //   },
+    // },
     freezeTableName: true,
   }
 );

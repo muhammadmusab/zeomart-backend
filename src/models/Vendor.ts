@@ -18,6 +18,7 @@ interface VendorModel
   description?: string;
   phone?: string;
   coverPhoto?: string;
+  stripeConnectId?: string;
 }
 export const Vendor = sequelize.define<VendorModel>(
   "Vendor",
@@ -41,10 +42,13 @@ export const Vendor = sequelize.define<VendorModel>(
     phone: {
       type: DataTypes.STRING,
     },
+    stripeConnectId: {
+      type: DataTypes.STRING,
+    },
   },
   {
     defaultScope: {
-      attributes: { exclude: ["id"] },
+      attributes: { exclude: ["id","stripeConnectId"] },
     },
     scopes: {
       withId: {

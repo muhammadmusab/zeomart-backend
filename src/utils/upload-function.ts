@@ -29,6 +29,8 @@ export const Upload = (type = "image") => {
           })
         );
       }
+      console.log(JSON.stringify(files));
+      
       res.send({ message: "Success", data: files });
     } catch (error: any) {
       // console.log(error.message);

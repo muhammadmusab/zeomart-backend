@@ -16,6 +16,7 @@ interface OptionModel
   id?: CreationOptional<number>;
   uuid: CreationOptional<string>;
   value: any;
+  AttributeId?: number;
 }
 export const Option = sequelize.define<OptionModel>(
   "Option",
@@ -29,17 +30,25 @@ export const Option = sequelize.define<OptionModel>(
       type: DataTypes.STRING,
       unique: true,
     },
-  },
-  {
-    defaultScope: {
-      attributes: { exclude: ["id"] },
-    },
-    scopes: {
-      withId: {
-        attributes: {
-          exclude: [],
-        },
+    AttributeId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: "Attributes",
+        key: "id",
       },
     },
   }
+  // {
+  //   defaultScope: {
+  //     attributes: { exclude: ["id","AttributeId"] },
+  //   },
+  //   scopes: {
+  //     withId: {
+  //       attributes: {
+  //         exclude: [],
+  //       },
+  //     },
+  //   },
+  // }
 );

@@ -1,33 +1,44 @@
 import express from "express";
 
 import {
-  Create,
-  Delete,
   CreateUpdate,
+  // Create,
+  Delete,
   Get,
   List,
   CalculateTotal,
-  UpdateOrderStatus,
+  PlaceOrder,
+  OrderList,
+  AddUser,
 } from "../../controllers/cart/cart";
 import { validate } from "../../middlewares/validate-middleware";
 import {
   createCartSchema,
-  createUpdateCartSchema,
   deleteCartSchema,
   getCartSchema,
+  addUserCartSchema,
   CalculateTotalSchema,
-  UpdateStatusSchema,
+  PlaceOrderSchema,
 } from "../../schemas/cart/cart";
 import basicAuthMiddleware from "../../middlewares/basic-auth-middleware";
+import optionalMiddleware from "../../middlewares/optional-auth-middleware";
+import authMiddleware from "../../middlewares/auth-middleware";
+import { UserType } from "../../types/model-types";
 
 const router = express.Router();
 
-router.post("/create", validate(createCartSchema), Create);
-router.post("/create-update", validate(createUpdateCartSchema), CreateUpdate);
+router.get("/get/:uid?",  validate(getCartSchema),optionalMiddleware, Get);
+router.post("/create-update",  validate(getCartSchema),optionalMiddleware, CreateUpdate);
+router.post("/add-user/:uid",  validate(getCartSchema),authMiddleware(UserType.USER), AddUser);
+
+
+
+
 router.post("/calculate-total", validate(CalculateTotalSchema), CalculateTotal);
-router.post("/update-status",basicAuthMiddleware, validate(UpdateStatusSchema), UpdateOrderStatus);
+router.post("/place-order",authMiddleware(UserType.USER), validate(PlaceOrderSchema), PlaceOrder);
+router.get("/order/list",authMiddleware(UserType.VENDOR), OrderList);
 router.delete("/delete/:uid", validate(deleteCartSchema), Delete);
-router.get("/get/:uid", validate(getCartSchema), Get);
+// router.get("/get/:uid", validate(getCartSchema), Get);
 router.get("/list", List);
 
 export default router;

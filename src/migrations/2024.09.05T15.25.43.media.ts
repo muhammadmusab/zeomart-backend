@@ -44,6 +44,10 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
       type: DataTypes.INTEGER, // stores the product/category id
       allowNull: false,
     },
+    default: {
+      type: DataTypes.BOOLEAN,
+      defaultValue:false,
+    },
     createdAt: {
       type: DataTypes.DATE,
     },

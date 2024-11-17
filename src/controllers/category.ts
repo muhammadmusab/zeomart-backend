@@ -66,7 +66,13 @@ export const Create = async (
     }
 
     const { data } = getData(category);
-    const { data: mediaData } = getData(mediaObject, "media");
+    console.log(mediaObject);
+    let mediaData = null;
+    if (mediaObject) {
+      const { data } = getData(mediaObject, "media");
+      mediaData = data;
+    }
+
     res.status(201).send({
       message: "Success",
       data: { ...data, media: mediaData },
@@ -108,6 +114,7 @@ export const Update = async (
       },
     });
     if (category) {
+      const categoryId = category.id;
       if (!validBody.media?.length) {
         await mediaObject?.destroy();
       } else {
@@ -121,7 +128,7 @@ export const Update = async (
             mime: tempMedia?.mime,
             name: tempMedia?.name,
             mediaableType: "Category",
-            mediaableId: category?.id,
+            mediaableId: categoryId,
           });
         } else {
           mediaObject.url = tempMedia.url;
@@ -231,13 +238,15 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     // sortBy
     const sortBy = req.query.sortBy ? req.query.sortBy : "createdAt";
     const sortAs = req.query.sortAs ? (req.query.sortAs as string) : "DESC";
-    const showChildren =
-      req.query.showSubcategories?.toString().toLocaleLowerCase().trim() ===
-      "true"
+ 
+    // level of deep subcategories
+    // const levels = req.query.levels ? req.query.levels : 1;
+    //@ts-expect-error
+    const { levels = 1, showSubcategories } = req.filter;
+    let showChildren =
+      showSubcategories?.toString().toLocaleLowerCase().trim() === "true"
         ? true
         : false;
-    // level of deep subcategories
-    const levels = req.query.levels ? req.query.levels : 1;
     const { include } = addIncludeLevels(levels as number, showChildren);
     const where: { uuid?: string; title?: any } = {};
     if (title) {

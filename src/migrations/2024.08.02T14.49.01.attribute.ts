@@ -2,7 +2,7 @@ import type { Migration } from "../umguz";
 import { DataTypes, Sequelize, UUIDV4 } from "sequelize";
 
 export const up: Migration = async ({ context }: { context: Sequelize }) => {
-  await context.getQueryInterface().createTable("ProductTypes", {
+  await context.getQueryInterface().createTable("Attributes", {
     id: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -14,14 +14,13 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
       defaultValue: UUIDV4,
       unique: true,
     },
-    type: {
-      //general table for adding all the types of the products
+    title: {
       // 'ssd' | 'ram' | 'color' | 'size'
       type: DataTypes.STRING,
       allowNull: false,
       unique: true,
       get(this) {
-        const value = this.getDataValue("type").replace("_", " ");
+        const value = this.getDataValue("title").replace("_", " ");
         return value
           .split(" ")
           .map((word: string) => {
@@ -29,6 +28,9 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
           })
           .join(" ");
       },
+    },
+    type: {
+      type: DataTypes.STRING,
     },
     createdAt: {
       type: DataTypes.DATE,
@@ -40,5 +42,5 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
 };
 
 export const down: Migration = async ({ context }: { context: Sequelize }) => {
-  await context.getQueryInterface().dropTable("ProductTypes");
+  await context.getQueryInterface().dropTable("Attributes");
 };

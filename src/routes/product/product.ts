@@ -5,6 +5,9 @@ import {
   Update,
   Delete,
   List,
+  GetBrand,
+  ListAdmin,
+  GetAdmin,
 } from "../../controllers/product/product";
 import { validate } from "../../middlewares/validate-middleware";
 import {
@@ -13,6 +16,7 @@ import {
   updateProductSchema,
   deleteProductSchema,
   listProductSchema,
+  getProductBrandSchema,
 } from "../../schemas/product/product";
 import authMiddleware from "../../middlewares/auth-middleware";
 import { UserType } from "../../types/model-types";
@@ -28,11 +32,13 @@ router.post(
   authMiddleware(UserType.VENDOR),
   Create
 );
+router.get("/get/:uid", validate(getProductSchema), filtersMiddleware, Get);
+router.get("/get/:uid/vendor", validate(getProductSchema), filtersMiddleware, GetAdmin);
 router.get(
-  "/get/:uid",
-  validate(getProductSchema),
+  "/list/brands",
   filtersMiddleware,
-  Get
+  validate(getProductBrandSchema),
+  GetBrand
 );
 
 router.patch(
@@ -50,10 +56,11 @@ router.delete(
 );
 router.post(
   "/upload",
-  uploadMiddleware().array("media",5),
+  uploadMiddleware().array("media", 5),
   authMiddleware(UserType.VENDOR),
   Upload()
 );
-router.get("/list", validate(listProductSchema), List);
+router.get("/list",filtersMiddleware, validate(listProductSchema), List);
+router.get("/list/vendor",authMiddleware(UserType.VENDOR),filtersMiddleware, validate(listProductSchema), ListAdmin);
 
 export default router;
