@@ -1,13 +1,14 @@
 import express from "express";
 import basicAuthMiddleware from "../middlewares/basic-auth-middleware";
-import { Create, Delete, Get, List, StripeCreateAccount, Update ,StripeCheckout, StripeWebHook, StripeLinkAccount} from "../controllers/payment";
+import { Create, Delete, Get, List, StripeCreateAccount, Update ,StripeCheckout, StripeWebHook, StripeRetrieveAccount, StripeLinkAccount, StripeLogin} from "../controllers/payment";
 import { validate } from "../middlewares/validate-middleware";
 import {
   createPaymentSchema,
   updatePaymentSchema,
   deletePaymentSchema,
   listPaymentSchema,
-  getPaymentSchema
+  getPaymentSchema,
+  linkAccountSchema
 
 } from "../schemas/payment";
 import authMiddleware from "../middlewares/auth-middleware";
@@ -59,8 +60,14 @@ router.post(
 );
 router.post(
   "/stripe/link-account",
+  validate(linkAccountSchema),
   authMiddleware(UserType.VENDOR),
   StripeLinkAccount
+);
+router.post(
+  "/stripe/login-link",
+  authMiddleware(UserType.VENDOR),
+  StripeLogin
 );
 router.post(
   "/stripe/checkout",
@@ -72,6 +79,12 @@ router.post(
   express.text(),
   // authMiddleware(UserType.USER),
   StripeWebHook
+);
+router.get(
+  "/stripe/get-account-status",
+  // validate(listPaymentSchema),
+  authMiddleware(UserType.VENDOR),
+  StripeRetrieveAccount
 );
 
 

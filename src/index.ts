@@ -73,6 +73,7 @@ import productAnswerRoutes from "./routes/product/productAnswer";
 // cart
 import cartRoutes from "./routes/cart/cart";
 import cartItemRoutes from "./routes/cart/cartItem";
+import paymentRoutes from "./routes/payment";
 
 
 //attribute
@@ -113,6 +114,7 @@ app.use('/v1/api/cart-item', cartItemRoutes);
 // app.use('/v1/api/coupon',couponRoutes);
 
 //shipping
+app.use("/v1/api/payment", paymentRoutes);
 app.use("/v1/api/shipping", shippingRoutes);
 
 //Error Handler

@@ -21,6 +21,8 @@ interface CartModel
   discountAmount: number;
   status?: string;
   UserId?: CreationOptional<number>;
+  paymentMethod: string;
+  trackingId: string;
 }
 export const Cart = sequelize.define<CartModel>(
   "Cart",
@@ -51,12 +53,21 @@ export const Cart = sequelize.define<CartModel>(
       type: DataTypes.STRING,
       defaultValue: "PENDING",
     },
+    paymentMethod: {
+      type: DataTypes.STRING,
+      defaultValue: "cash_on_delivery",
+    },
     UserId: {
       type: DataTypes.INTEGER,
       references: {
         model: "Users",
         key: "id",
       },
+    },
+    trackingId: {
+      type: DataTypes.STRING,
+      unique: true,
+      allowNull: false,
     },
   },
   {

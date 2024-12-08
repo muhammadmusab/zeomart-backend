@@ -61,3 +61,14 @@ export const addUserCartSchema = yup.object({
     uid: yup.string().required(),
   }),
 });
+export const UpdateOrderStatusSchema = yup.object({
+  params: yup.object({
+    uid: yup.string().uuid().required(),
+  }),
+  body: yup.object({
+    status: yup
+      .string()
+      .oneOf(["AWAITING_SHIPMENT", "SHIPPED", "DELIVERED"])
+      .required(),
+  }),
+});

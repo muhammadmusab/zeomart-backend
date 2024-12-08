@@ -10,13 +10,14 @@ import {
   PlaceOrder,
   OrderList,
   AddUser,
+  UpdateOrderStatus,
 } from "../../controllers/cart/cart";
 import { validate } from "../../middlewares/validate-middleware";
 import {
   createCartSchema,
   deleteCartSchema,
   getCartSchema,
-  addUserCartSchema,
+  UpdateOrderStatusSchema,
   CalculateTotalSchema,
   PlaceOrderSchema,
 } from "../../schemas/cart/cart";
@@ -37,6 +38,7 @@ router.post("/add-user/:uid",  validate(getCartSchema),authMiddleware(UserType.U
 router.post("/calculate-total", validate(CalculateTotalSchema), CalculateTotal);
 router.post("/place-order",authMiddleware(UserType.USER), validate(PlaceOrderSchema), PlaceOrder);
 router.get("/order/list",authMiddleware(UserType.VENDOR), OrderList);
+router.patch("/update-status/:uid",authMiddleware(UserType.VENDOR),validate(UpdateOrderStatusSchema), UpdateOrderStatus);
 router.delete("/delete/:uid", validate(deleteCartSchema), Delete);
 // router.get("/get/:uid", validate(getCartSchema), Get);
 router.get("/list", List);

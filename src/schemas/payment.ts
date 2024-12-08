@@ -19,6 +19,11 @@ export const updatePaymentSchema = yup.object({
     amount: yup.number(),
   }),
 });
+export const linkAccountSchema = yup.object({
+  body: yup.object({
+    accountId: yup.string().required(),
+  }),
+});
 
 export const deletePaymentSchema = yup.object({
   params: yup.object({
@@ -30,6 +35,7 @@ export const getPaymentSchema = yup.object({
     uid: yup.string().uuid().required(),
   }),
 });
+
 
 export const listPaymentSchema = yup.object({
   query: yup.object({

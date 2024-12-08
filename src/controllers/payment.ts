@@ -182,12 +182,12 @@ export const StripeCreateAccount = async (
 
     const accountLink = await stripe.accountLinks.create({
       account: account.id,
-      refresh_url: `${process.env.DOMAIN}/refresh/${account.id}`,
-      return_url: `${process.env.DOMAIN}/return/${account.id}`,
+      refresh_url: `${process.env.DOMAIN}/vendor/payments/stripe-connect/refresh/${account.id}`,
+      return_url: `${process.env.DOMAIN}/vendor/payments/stripe-connect/success/${account.id}`,
       type: "account_onboarding",
     });
 
-    res.send({ message: "Success", data: accountLink.url });
+    res.send({ message: "Success", data: { url: accountLink.url } });
   } catch (error) {
     next(error);
   }
@@ -201,12 +201,29 @@ export const StripeLinkAccount = async (
     const { accountId } = req.body;
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${process.env.DOMAIN}/refresh/${accountId}`,
-      return_url: `${process.env.DOMAIN}/return/${accountId}`,
+      refresh_url: `${process.env.DOMAIN}/vendor/payments/stripe-connnect/refresh/${accountId}`,
+      return_url: `${process.env.DOMAIN}/vendor/payments/stripe-connnect/success/${accountId}`,
       type: "account_onboarding",
     });
 
-    res.send({ message: "Success", data: accountLink.url });
+    res.send({ message: "Success", data: { url: accountLink.url } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const StripeLogin = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const vendor = req.user.Vendor;
+    console.log(vendor);
+    const accountId = vendor?.stripeConnectId!;
+    const loginLink = await stripe.accounts.createLoginLink(accountId);
+
+    res.send({ message: "Success", data: { url: loginLink.url } });
   } catch (error) {
     next(error);
   }
@@ -217,8 +234,8 @@ export const StripeCheckout = async (
   next: NextFunction
 ) => {
   try {
+    const { cart } = req.body;
     const user = req.user.User?.uuid;
-
     const _user = await User.scope("withId").findOne({
       where: {
         uuid: user,
@@ -227,6 +244,7 @@ export const StripeCheckout = async (
 
     const _cart = await Cart.scope("withId").findOne({
       where: {
+        uuid: cart,
         UserId: _user?.id,
         status: "CONFIRMED",
       },
@@ -236,56 +254,18 @@ export const StripeCheckout = async (
       return res.status(404).send({ message: "Cart not found" });
     }
 
-    const _cartItems: any = await CartItem.findAll({
-      where: {
-        CartId: _cart.id,
-      },
-      attributes: ["ProductId", "ProductSkuId", "quantity"],
-      include: [
-        {
-          model: Product,
-          attributes: {
-            include: ["title"],
-          },
-        },
-      ],
-    });
-
-    if (!_cartItems.length) {
-      const err = new BadRequestError("Cart is empty!");
-      return res.status(err.status).send({ message: err.message });
-    }
-
-    const line_items: any = _cartItems.map((item: any) => {
-      return {
-        price_data: {
-          currency: "usd",
-          product_data: {
-            name: item.dataValues.Product.title,
-          },
-          unit_amount: item.subTotal,
-        },
-        quantity: item.quantity,
-      };
-    });
-
-    let session = await stripe.checkout.sessions.create({
-      line_items: line_items,
-      payment_intent_data: {
-        transfer_group: _cart.uuid,
-      },
-      mode: "payment",
-      success_url: `${process.env.DOMAIN}/order/success?session_id={CHECKOUT_SESSION_ID}`,
-      metadata: {
-        orderId: _cart.uuid,
-      },
-    });
-    let data = session ? session.url : null;
+    const session = await checkoutStripe(req, res, { cart: _cart });
     if (session.url) {
       _cart.status = "AWAITING_PAYMENT";
       await _cart.save();
     }
-    res.send({ message: "Success", data });
+    return res.send({
+      message: "Success",
+      data: {
+        url: session.url,
+        cart: _cart,
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -325,10 +305,11 @@ export const StripeWebHook = async (
         break;
       case "checkout.session.completed":
         const sessionCompleted = event.data.object;
-        if (sessionCompleted && sessionCompleted.metadata) {
+        const orderId = sessionCompleted?.metadata?.orderId;
+        if (orderId) {
           const _cart = await Cart.findOne({
             where: {
-              uuid: sessionCompleted.metadata.orderId as string,
+              uuid: orderId as string,
             },
           });
 
@@ -336,6 +317,52 @@ export const StripeWebHook = async (
             _cart.status = "CONFIRMED";
             await _cart.save();
           }
+        }
+        if (sessionCompleted.payment_intent) {
+          stripe.paymentIntents
+            .retrieve(sessionCompleted.payment_intent as string)
+            .then(async (paymentIntent) => {
+              const chargeId = paymentIntent.latest_charge?.toString();
+              if (paymentIntent.status === "succeeded") {
+                // 1) Get order id from metadata
+                const _cart = await Cart.scope("withId").findOne({
+                  where: {
+                    uuid: orderId,
+                  },
+                });
+
+                if (_cart?.id) {
+                  const _cartItems = await CartItem.findAll({
+                    where: {
+                      CartId: _cart?.id,
+                    },
+                    attributes: {
+                      include: ["subTotal"],
+                    },
+                    include: [
+                      {
+                        model: Vendor,
+                        as: "vendor",
+                        attributes: ["uuid", "stripeConnectId"],
+                      },
+                    ],
+                  });
+                  _cartItems.map(async (item: any) => {
+                    let payload: {
+                      subTotal: number;
+                      vendor: { uuid: string; stripeConnectId: string };
+                    } = item;
+                    // loop through order vendors and create charge for each vendor
+                    const transfer = await stripe.transfers.create({
+                      amount: payload.subTotal, // set to whatever the vendor should receive
+                      currency: "usd",
+                      source_transaction: chargeId,
+                      destination: payload.vendor.stripeConnectId, // get from vendor,
+                    });
+                  });
+                }
+              }
+            });
         }
         console.log("Payment session completed:", sessionCompleted);
         break;
@@ -349,4 +376,94 @@ export const StripeWebHook = async (
   } catch (error) {
     next(error);
   }
+};
+
+export const StripeRetrieveAccount = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const vendor = req.user.Vendor?.uuid;
+    let status = "not_connected";
+    const _vendor = await Vendor.scope("withId").findOne({
+      where: {
+        uuid: vendor,
+      },
+    });
+    if (!_vendor?.stripeConnectId) {
+      return res.send({ message: "Success", data: { status } });
+    }
+    const account = await stripe.accounts.retrieve(_vendor?.stripeConnectId);
+
+    const isComplete =
+      (account.requirements?.currently_due &&
+        account.requirements?.currently_due.length) === 0 &&
+      account.requirements?.past_due &&
+      account.requirements?.past_due.length === 0 &&
+      (account.requirements?.pending_verification &&
+        account.requirements?.pending_verification.length) === 0;
+    if (isComplete) {
+      status = "connected";
+    }
+
+    res.send({ message: "Success", data: { status } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const checkoutStripe = async (
+  req: Request,
+  res: Response,
+  payload?: Record<string, any>
+) => {
+  const _cartItems: any = await CartItem.findAll({
+    where: {
+      CartId: payload?.cart.id,
+    },
+    attributes: ["ProductId", "ProductSkuId", "quantity", "subTotal"],
+    include: [
+      {
+        model: Product,
+        as: "product",
+        attributes: {
+          include: ["title"],
+        },
+      },
+    ],
+  });
+
+  if (!_cartItems.length) {
+    const err = new BadRequestError("Cart is empty!");
+    return res.status(err.status).send({ message: err.message });
+  }
+
+  const line_items: any = _cartItems.map((item: any) => {
+    console.log(item.dataValues);
+    return {
+      price_data: {
+        currency: "usd",
+        product_data: {
+          name: item.product.dataValues.title,
+        },
+        unit_amount: parseInt(item.dataValues.subTotal)*100,
+      },
+      quantity: parseInt(item.dataValues.quantity),
+    };
+  });
+
+  let session = await stripe.checkout.sessions.create({
+    line_items: line_items,
+    payment_intent_data: {
+      transfer_group: payload?.cart.uuid,
+    },
+    mode: "payment",
+    success_url: `${process.env.DOMAIN}/order/success?session_id={CHECKOUT_SESSION_ID}`,
+    metadata: {
+      orderId: payload?.cart.uuid,
+    },
+  });
+  let data: any = session ? session : null;
+  return data;
 };

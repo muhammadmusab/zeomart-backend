@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { BadRequestError } from "../../utils/api-errors";
+import { BadRequestError, NotFoundError } from "../../utils/api-errors";
 import { Cart } from "../../models/Cart";
 import { Product } from "../../models/Product";
 import { ProductSkus } from "../../models/ProductSku";
@@ -19,6 +19,9 @@ import { Attribute } from "../../models/Attribute";
 import { isValidUUID } from "../../utils/is-valid-uuid";
 import { Op, QueryTypes } from "sequelize";
 import { Vendor } from "../../models/Vendor";
+import { generateOrderId } from "../../utils/generate-order-id";
+import { checkoutStripe } from "../payment";
+
 interface CartItemType {
   subTotal?: number;
   quantity?: number;
@@ -315,6 +318,23 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
     next(error);
   }
 };
+// export const OrderGet = async (req: Request, res: Response, next: NextFunction) => {
+//   try {
+//     const { uid } = req.params; // cart uuid (optional)
+//     const { _cart, data } = await getCart({ uid, user: req.user });
+//     if (_cart.dataValues.id) {
+//       delete _cart.dataValues.id;
+//     }
+//     const resultData: any = data;
+//     res.send({
+//       message: "Success",
+
+//       data: resultData?.length ? resultData[0] : resultData,
+//     });
+//   } catch (error: any) {
+//     next(error);
+//   }
+// };
 // export const Create = async (
 //   req: Request,
 //   res: Response,
@@ -629,6 +649,10 @@ export const PlaceOrder = async (
       const err = new BadRequestError("Cart is empty!");
       return res.status(err.status).send({ message: err.message });
     }
+    let data:any={
+      cart:null,
+      url:null
+    }
     await sequelize.transaction(async (t) => {
       _cart.status = "PENDING";
       await Promise.all(
@@ -658,17 +682,24 @@ export const PlaceOrder = async (
           }
         })
       );
+      
       if (paymentMethod === "cash_on_delivery") {
         _cart.status = "CONFIRMED";
+      } else {
+        const session = await checkoutStripe(req, res, { cart: _cart });
+        data.url=session.url
+        _cart.status = "AWAITING_PAYMENT";
       }
+      _cart.paymentMethod = paymentMethod;
       await _cart.save();
       await _cart.reload();
       delete _cart.dataValues.id;
+      data.cart=_cart
     });
 
     res.status(201).send({
       message: "Success",
-      data: _cart,
+      data,
     });
   } catch (error: any) {
     next(error);
@@ -683,122 +714,115 @@ export const OrderList = async (
   try {
     // const { uid } = req.params;
     const vendor = req.user.Vendor?.uuid;
+
     const _vendor = await Vendor.scope("withId").findOne({
       where: {
         uuid: vendor,
       },
     });
-    // const _cart = await Cart.scope("withId").findOne({
-    //   where: {
-    //     uuid: uid,
-    //   },
-    // });
 
-    const order = await Cart.findAll({
+    const query = `
+    SELECT 
+    au."avatar",
+    u."firstName",
+    u."lastName",
+    c."uuid" AS "cartUniqueId",
+    c."paymentMethod",
+    c."status",
+    vt."vendorTotal" AS "totalPrice",
+    c."createdAt" AS "orderDate",
+    array_agg(
+        DISTINCT jsonb_build_object(
+            'uuid', p."uuid",
+            'title', p."title",
+            'quantity', ci."quantity",
+            'price', ci."subTotal",
+            'attributeOptions', (
+                        SELECT jsonb_agg(DISTINCT jsonb_build_object(
+                            'attribute', a."title",
+                            'value', o."value"
+                        ))
+                        FROM "SkuVariations" sv
+                        JOIN "ProductVariantValues" pvv ON sv."ProductVariantValueId" = pvv."id"
+                        JOIN "Options" o ON pvv."OptionId" = o."id"
+                        JOIN "Attributes" a ON pvv."AttributeId" = a."id"
+                        WHERE sv."ProductSkuId" = ps."id"
+                    )
+        )
+    ) AS "items"
+FROM "CartItem" AS ci
+LEFT JOIN "Vendors" AS v ON v."id" = ci."VendorId"
+LEFT JOIN "Cart" AS c ON ci."CartId" = c."id"
+JOIN "Users" AS u ON c."UserId" = u."id"
+JOIN "Auth" AS au ON au."UserId" = u."id"
+LEFT JOIN "Products" AS p ON ci."ProductId" = p."id"
+LEFT JOIN "ProductSkus" as ps ON ci."ProductSkuId" = ps."id"
+LEFT JOIN "SkuVariations" AS sv ON sv."ProductId" = p."id"
+LEFT JOIN "ProductVariantValues" AS pvv ON sv."ProductVariantValueId" = pvv."id"
+LEFT JOIN "Options" AS o ON pvv."OptionId" = o."id"
+LEFT JOIN "Attributes" AS a ON pvv."AttributeId" = a."id"
+LEFT JOIN (
+    SELECT 
+        ci_sub."CartId",
+        ci_sub."VendorId",
+        SUM(ci_sub."subTotal") AS "vendorTotal"
+    FROM "CartItem" AS ci_sub
+    GROUP BY ci_sub."CartId", ci_sub."VendorId"
+) AS vt ON vt."CartId" = c."id" AND vt."VendorId" = v."id"
+WHERE c."status" != 'IN_CART' AND v.id=${_vendor?.id}
+GROUP BY 
+    c."id", 
+    v."uuid", 
+    v."name", 
+    c."paymentMethod", 
+    c."status", 
+    vt."vendorTotal",
+    au."avatar",
+    u."firstName",
+    u."lastName"
+    `;
+
+    const [data] = await sequelize.query(query, {
+      type: QueryTypes.RAW,
+    });
+
+    res.send({ message: "Success", data });
+  } catch (error: any) {
+    next(error);
+  }
+};
+export const UpdateOrderStatus = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    // awaiting_shipment, shipped, delivered
+    const { uid } = req.params;
+    const { status } = req.body;
+    const _cart = await Cart.scope("withId").findOne({
       where: {
+        uuid: uid,
         status: {
-          [Op.not]: "IN_CART",
-        },
-      },
-      include: [
-        {
-          model: CartItem,
-          as: "cartItems",
-          where: {
-            VendorId: _vendor?.id,
-          },
-          attributes: {
-            exclude: ["id", "CartId", "ProductId", "ProductSkuId", "VendorId"],
-          },
-          include: [
-            {
-              model: ProductSkus,
-              as: "sku",
-              attributes: {
-                exclude: ["id", "ProductId"],
-              },
-              include: [
-                // {
-                //   model: Media,
-                //   as: "media",
-                //   required: false,
-                //   where: {
-                //     default: true,
-                //   },
-                //   attributes: {
-                //     exclude: ["id", "mediaableId"],
-                //   },
-                // },
-                {
-                  model: SkuVariations,
-                  attributes: {
-                    exclude: [
-                      "id",
-                      "combinationIds",
-                      "ProductSkuId",
-                      "ProductVariantValueId",
-                      "ProductId",
-                    ],
-                  },
-                  include: [
-                    {
-                      model: ProductVariantValues,
-                      attributes: {
-                        exclude: ["id", "OptionId", "AttributeId"],
-                      },
-
-                      include: [
-                        {
-                          model: Attribute,
-                          attributes: {
-                            exclude: ["id"],
-                          },
-                          as: "attribute",
-                          include: [
-                            {
-                              model: Option,
-                              as: "options",
-                            },
-                          ],
-                        },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-            {
-              model: Product,
-              as: "product",
-              attributes: {
-                exclude: [
-                  "id",
-                  "OptionId",
-                  "VendorId",
-                  "CategoryId",
-                  "specifications",
-                  "highlights",
-                ],
-              },
-              // include: [
-              //   {
-              //     model: Media,
-              //     as: "media",
-              //     required: false,
-              //     where: {
-              //       default: true,
-              //     },
-              //     attributes: {
-              //       exclude: ["id", "mediaableId"],
-              //     },
-              //   },
-              // ],
-            },
+          [Op.not]: [
+            "IN_CART",
+            "PENDING",
+            "AWAITING_PAYMENT",
+            "CANCELLED",
+            "REFUNDED",
           ],
         },
-      ],
+      },
     });
-    res.send({ message: "Success", data: order });
+    if (!_cart) {
+      const err = new NotFoundError("Order not found");
+      return res.status(err.status).send({ message: err.message });
+    }
+
+    _cart.status = status;
+    await _cart.save();
+
+    res.send({ message: "Success" });
   } catch (error: any) {
     next(error);
   }
@@ -976,6 +1000,7 @@ GROUP BY
       subTotal: 0,
       taxAmount: 0,
       status: "IN_CART",
+      trackingId: generateOrderId(),
     };
     if (payload.user && _user && _user?.id) {
       cartBody["UserId"] = _user.id;

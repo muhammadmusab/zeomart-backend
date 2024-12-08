@@ -110,7 +110,7 @@ export const Create = async (
         }
       }
 
-      const _category = await Category.scope("withId").findOne({
+      const _category = await Category.findOne({
         where: {
           uuid: category,
         },
@@ -262,7 +262,7 @@ export const Update = async (
 
       // if we want to change the parent of the current category
       if (req.body.category) {
-        const category = await Category.scope("withId").findOne({
+        const category = await Category.findOne({
           where: {
             uuid: req.body.category,
           },
@@ -463,7 +463,7 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
       let productVariantValuesIds = _productVariantValues.map(
         (item) => item.id
       );
-    
+
       _productSku = await SkuVariations.findAll({
         where: {
           combinationIds: {
@@ -479,7 +479,6 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
       _productSku = {
         id: _productSku[0],
       };
-  
     } else {
       _productSku = await ProductSkus.findOne({
         where: {
@@ -488,7 +487,7 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
         },
       });
     }
-    
+
     let productWhere = `p."uuid"='${uid}'`;
     let having = ``;
     let productSkuWhere = `ps."ProductId"='${ProductId}'`;
@@ -515,7 +514,6 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
      LEFT JOIN "Favourites" as f ON f."ProductId" = p."id"
     WHERE ${productWhere}
     GROUP BY p."uuid",p."hasVariants",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",c."title",c."slug",f."uuid",f."state"`;
-
 
     const productMediaQuery = `
     SELECT  pm."uuid","url","width","height","size","mime","name" from "Media" as pm
@@ -599,7 +597,6 @@ export const Get = async (req: Request, res: Response, next: NextFunction) => {
         type: QueryTypes.RAW,
       });
 
-      
       data = {
         // @ts-expect-error
         ...productData[0],
@@ -761,7 +758,6 @@ export const GetBrand = async (
     res.status(500).send({ message: error.message });
   }
 };
-
 export const List = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { limit, offset } = getPaginated(req.query);
@@ -770,36 +766,36 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     //@ts-expect-error
     const sort = req.sort;
 
-    let _category;
+    let _category:any=null;
     if (category) {
-      _category = await Category.scope("withId").findOne({
+      _category = await Category.findOne({
         where: {
           slug: category,
         },
-      });
-    }
-
-    let _vendor;
-    if (req.query.vendor) {
-      _vendor = await Vendor.scope("withId").findOne({
-        where: {
-          uuid: req.query.vendor as string,
+        attributes:{
+          exclude:['ParentId']
         },
+        include: [
+          {
+            model: Category,
+            as: "subCategories",
+          },
+        ],
       });
     }
 
-    const where: { CategoryId?: number; VendorId?: number } = {};
-    if (_category?.id) {
-      where.CategoryId = _category.id;
+    const categoryId=_category?.id
+    let subCategoryIds:any=_category?.subCategories.map((item:any)=>{
+      return item.id
+    })
+    if(subCategoryIds.length){
+      subCategoryIds.push(categoryId)
     }
-    if (_vendor?.id) {
-      where.VendorId = _vendor.id;
-    }
-
+ 
     let Querywhere = ``;
     let having = ``;
     if (_category?.id) {
-      Querywhere = `AND p."CategoryId"=${_category.id}`;
+      Querywhere = `AND p."CategoryId" IN (${subCategoryIds})`;
     }
 
     let optionIds: number[] = [];
@@ -935,18 +931,6 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
                 LIMIT ${limit} OFFSET ${offset}
                 ;
                 `;
-    // const totalQuery = `
-    //            SELECT DISTINCT COUNT(*) over() as "total"
-    //             FROM public."Products" as p
-    //                LEFT  JOIN "Categories" as c ON p."CategoryId" = c."id"
-    //                LEFT  JOIN "ProductSkus" as ps ON ps."ProductId" = p."id"
-    //                LEFT  JOIN "SkuVariations" as sv ON sv."ProductId" = p."id"
-    //                LEFT  JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
-    //                LEFT  JOIN "Options" as o ON pvv."OptionId" = o."id"
-    //                LEFT  JOIN "Attributes" as a ON pvv."AttributeId" = a."id"
-    //             WHERE (ps."isDefault" = TRUE OR ps."id" IS NULL) ${Querywhere}
-    //             GROUP BY p."uuid",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",c."title",c."slug",ps."uuid",ps."sku",ps."oldPrice",ps."currentPrice",ps."quantity",ps."uuid",ps."isDefault";
-    //             `;
 
     const totalQuery = `SELECT DISTINCT "total" 
                       FROM (
@@ -985,6 +969,151 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     next(error);
   }
 };
+
+export const DealList = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { limit, offset } = getPaginated(req.query);
+ 
+    let Querywhere = `AND ((p."oldPrice" IS NOT NULL AND p."currentPrice" IS NOT NULL AND p."oldPrice" > p."currentPrice")
+    OR
+    (ps."oldPrice" IS NOT NULL AND ps."currentPrice" IS NOT NULL AND ps."oldPrice" > ps."currentPrice"))`;
+    const query = `
+                SELECT p."uuid",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."hasVariants",p."createdAt",
+                array_agg(
+                DISTINCT jsonb_build_object(
+                'id',pm."id",'url',pm."url",'width',pm."width",'height',pm."height",'size',pm."size",'mime',pm."mime",'name',pm."name") 
+                ) as "media",
+                array_agg(DISTINCT pvv."uuid") as "selectedOptions",
+                json_build_object(
+                'total',COUNT(DISTINCT pr."id"),
+                'average', COALESCE(ROUND(CAST(AVG(pr."rating") AS NUMERIC), 1), 0)
+                ) as "rating",
+                 json_build_object('title',c."title",'slug',c."slug") as "category",
+                 json_build_object('uuid',ps."uuid",'sku',ps."sku",'oldPrice',ps."oldPrice",'currentPrice',ps."currentPrice",'quantity',ps."quantity",'isDefault',ps."isDefault") as "sku",
+                 jsonb_build_object('uuid',f."uuid",'state',f."state") as "wishlist"
+                FROM public."Products" as p
+                   LEFT  JOIN "Media" as pm ON pm."mediaableId" = p."id" AND pm."mediaableType"='Product'
+                   LEFT  JOIN "Categories" as c ON p."CategoryId" = c."id"
+                   LEFT  JOIN "ProductSkus" as ps ON ps."ProductId" = p."id"
+                   LEFT  JOIN "Favourites" as f ON f."ProductId" = p."id" OR (f."ProductSkuId" IS NOT NULL AND f."ProductSkuId" = ps."id")
+                   LEFT  JOIN "SkuVariations" as sv ON sv."ProductId" = p."id"
+                   LEFT  JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
+                   LEFT  JOIN "Options" as o ON pvv."OptionId" = o."id"
+                   LEFT  JOIN "Attributes" as a ON pvv."AttributeId" = a."id"
+                   LEFT  JOIN "ProductReview" as pr ON pr."ProductId" = p."id"
+                WHERE (ps."isDefault" = TRUE OR ps."id" IS NULL) ${Querywhere}
+                GROUP BY p."uuid",p."hasVariants",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",c."title",c."slug",ps."uuid",ps."sku",ps."oldPrice",ps."currentPrice",ps."quantity",ps."uuid",ps."isDefault",f."uuid",f."state"
+                LIMIT ${limit} OFFSET ${offset}
+                ;
+                `;
+
+    const totalQuery = `SELECT DISTINCT "total" 
+                      FROM (
+                          SELECT 
+                              COUNT(*) OVER() as "total",p."uuid",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",
+                              json_build_object('title', c."title", 'slug', c."slug") as "category",
+                              json_build_object('sku', ps."sku", 'oldPrice', ps."oldPrice", 'currentPrice', ps."currentPrice", 'quantity', ps."quantity", 'isDefault', ps."isDefault") as "sku"
+                          FROM public."Products" as p
+                          LEFT JOIN "Categories" as c ON p."CategoryId" = c."id"
+                          LEFT JOIN "ProductSkus" as ps ON ps."ProductId" = p."id"
+                          LEFT JOIN "SkuVariations" as sv ON sv."ProductId" = p."id"
+                          LEFT JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
+                          LEFT JOIN "ProductReview" as pr ON pr."ProductId" = p."id"
+                          WHERE (ps."isDefault" = TRUE OR ps."id" IS NULL) ${Querywhere}
+                          GROUP BY 
+                              p."uuid", p."title", p."status", p."slug", p."overview", p."highlights", 
+                              p."sku", p."currentPrice", p."oldPrice", p."quantity", p."features", p."sold", 
+                              p."createdAt", c."title", c."slug", ps."uuid", ps."sku", ps."oldPrice", 
+                              ps."currentPrice", ps."quantity", ps."uuid", ps."isDefault"
+                      ) as "totalCount";`;
+
+    const [results] = await sequelize.query(query, {
+      type: QueryTypes.RAW,
+    });
+    const [totalResult] = await sequelize.query(totalQuery, {
+      type: QueryTypes.RAW,
+    });
+
+    const total =
+      //@ts-expect-error
+      totalResult.length && totalResult[0].total ? totalResult[0].total : 0;
+    res.send({ message: "Success", data: results, total });
+  } catch (error: any) {
+    console.log(error.message);
+    next(error);
+  }
+};
+export const BestSellerList = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { limit, offset } = getPaginated(req.query);
+ 
+    let Querywhere = ``;
+    const query = `
+                SELECT p."uuid",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."hasVariants",p."createdAt",
+                array_agg(
+                DISTINCT jsonb_build_object(
+                'id',pm."id",'url',pm."url",'width',pm."width",'height',pm."height",'size',pm."size",'mime',pm."mime",'name',pm."name") 
+                ) as "media",
+                array_agg(DISTINCT pvv."uuid") as "selectedOptions",
+                json_build_object(
+                'total',COUNT(DISTINCT pr."id"),
+                'average', COALESCE(ROUND(CAST(AVG(pr."rating") AS NUMERIC), 1), 0)
+                ) as "rating",
+                 json_build_object('title',c."title",'slug',c."slug") as "category",
+                 json_build_object('uuid',ps."uuid",'sku',ps."sku",'oldPrice',ps."oldPrice",'currentPrice',ps."currentPrice",'quantity',ps."quantity",'isDefault',ps."isDefault") as "sku",
+                 jsonb_build_object('uuid',f."uuid",'state',f."state") as "wishlist"
+                FROM public."Products" as p
+                   LEFT  JOIN "Media" as pm ON pm."mediaableId" = p."id" AND pm."mediaableType"='Product'
+                   LEFT  JOIN "Categories" as c ON p."CategoryId" = c."id"
+                   LEFT  JOIN "ProductSkus" as ps ON ps."ProductId" = p."id"
+                   LEFT  JOIN "Favourites" as f ON f."ProductId" = p."id" OR (f."ProductSkuId" IS NOT NULL AND f."ProductSkuId" = ps."id")
+                   LEFT  JOIN "SkuVariations" as sv ON sv."ProductId" = p."id"
+                   LEFT  JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
+                   LEFT  JOIN "Options" as o ON pvv."OptionId" = o."id"
+                   LEFT  JOIN "Attributes" as a ON pvv."AttributeId" = a."id"
+                   LEFT  JOIN "ProductReview" as pr ON pr."ProductId" = p."id"
+                WHERE (ps."isDefault" = TRUE OR ps."id" IS NULL) ${Querywhere}
+                GROUP BY p."uuid",p."hasVariants",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",c."title",c."slug",ps."uuid",ps."sku",ps."oldPrice",ps."currentPrice",ps."quantity",ps."uuid",ps."isDefault",f."uuid",f."state"
+                LIMIT ${limit} OFFSET ${offset}
+                ORDER BY p."sold" DESC;
+                `;
+
+    const totalQuery = `SELECT DISTINCT "total" 
+                      FROM (
+                          SELECT 
+                              COUNT(*) OVER() as "total",p."uuid",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",
+                              json_build_object('title', c."title", 'slug', c."slug") as "category",
+                              json_build_object('sku', ps."sku", 'oldPrice', ps."oldPrice", 'currentPrice', ps."currentPrice", 'quantity', ps."quantity", 'isDefault', ps."isDefault") as "sku"
+                          FROM public."Products" as p
+                          LEFT JOIN "Categories" as c ON p."CategoryId" = c."id"
+                          LEFT JOIN "ProductSkus" as ps ON ps."ProductId" = p."id"
+                          LEFT JOIN "SkuVariations" as sv ON sv."ProductId" = p."id"
+                          LEFT JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
+                          LEFT JOIN "ProductReview" as pr ON pr."ProductId" = p."id"
+                          WHERE (ps."isDefault" = TRUE OR ps."id" IS NULL) ${Querywhere}
+                          GROUP BY 
+                              p."uuid", p."title", p."status", p."slug", p."overview", p."highlights", 
+                              p."sku", p."currentPrice", p."oldPrice", p."quantity", p."features", p."sold", 
+                              p."createdAt", c."title", c."slug", ps."uuid", ps."sku", ps."oldPrice", 
+                              ps."currentPrice", ps."quantity", ps."uuid", ps."isDefault"
+                      ) as "totalCount";`;
+
+    const [results] = await sequelize.query(query, {
+      type: QueryTypes.RAW,
+    });
+    const [totalResult] = await sequelize.query(totalQuery, {
+      type: QueryTypes.RAW,
+    });
+
+    const total =
+      //@ts-expect-error
+      totalResult.length && totalResult[0].total ? totalResult[0].total : 0;
+    res.send({ message: "Success", data: results, total });
+  } catch (error: any) {
+    console.log(error.message);
+    next(error);
+  }
+};
 export const ListAdmin = async (
   req: Request,
   res: Response,
@@ -999,12 +1128,12 @@ export const ListAdmin = async (
       // sort.sortAs = "DESC";
     }
     const { limit, offset } = getPaginated(req.query);
-
+    const vendor = req.user.Vendor?.uuid;
     let _vendor;
-    if (req.query.vendor) {
+    if (vendor) {
       _vendor = await Vendor.scope("withId").findOne({
         where: {
-          uuid: req.query.vendor as string,
+          uuid: vendor as string,
         },
       });
     }
@@ -1079,7 +1208,6 @@ export const ListAdmin = async (
     next(error);
   }
 };
-
 const getData = (instance: any) => {
   delete instance.dataValues.id;
   delete instance.dataValues.CategoryId;

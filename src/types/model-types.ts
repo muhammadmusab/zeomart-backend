@@ -12,6 +12,7 @@ export interface VendorData {
   description?: string;
   phone?: string;
   coverPhoto?: string;
+  stripeConnectId?:string;
 }
 
 export enum UserType {

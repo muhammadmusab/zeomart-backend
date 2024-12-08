@@ -319,3 +319,132 @@ FROM public."Products" as p
     LEFT  JOIN "ProductReview" as pr ON pr."ProductId" = p."id"
 WHERE (ps."isDefault" = TRUE OR ps."id" IS NULL) AND p."CategoryId"=39
 GROUP BY p."uuid",p."hasVariants",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",c."title",c."slug",ps."uuid",ps."sku",ps."oldPrice",ps."currentPrice",ps."quantity",ps."uuid",ps."isDefault",f."uuid",f."state";
+
+
+
+(SELECT  SUM(ci."subTotal") as "totalAmount" from "CartItem" as ci
+LEFT JOIN "Vendors" as v ON v."id"=ci."VendorId"
+LEFT JOIN "Cart" as c ON ci."CartId" = c."id"
+GROUP BY v."name",v."uuid");
+
+
+
+
+SELECT 
+    v."uuid" AS "vendor",
+    v."name" AS "vendorName",
+    c."paymentMethod",
+    c."status",
+    vt."vendorTotal" as "total", -- Pre-calculated vendor-specific total
+    array_agg(
+        DISTINCT jsonb_build_object(
+            'uuid', p."uuid",
+            'title', p."title",
+            'quantity', ci."quantity",
+            'price', ci."subTotal",
+            'attributeOptions', (
+                        SELECT jsonb_agg(DISTINCT jsonb_build_object(
+                            'attribute', a."title",
+                            'value', o."value"
+                        ))
+                        FROM "SkuVariations" sv
+                        JOIN "ProductVariantValues" pvv ON sv."ProductVariantValueId" = pvv."id"
+                        JOIN "Options" o ON pvv."OptionId" = o."id"
+                        JOIN "Attributes" a ON pvv."AttributeId" = a."id"
+                        WHERE sv."ProductSkuId" = ps."id"
+                    )
+            
+        )
+    ) AS "items"
+FROM "CartItem" AS ci
+LEFT JOIN "Vendors" AS v ON v."id" = ci."VendorId"
+LEFT JOIN "Cart" AS c ON ci."CartId" = c."id"
+LEFT JOIN "Products" AS p ON ci."ProductId" = p."id"
+LEFT JOIN "ProductSkus" as ps ON ci."ProductSkuId" = ps."id"
+LEFT JOIN "SkuVariations" AS sv ON sv."ProductId" = p."id"
+LEFT JOIN "ProductVariantValues" AS pvv ON sv."ProductVariantValueId" = pvv."id"
+LEFT JOIN "Options" AS o ON pvv."OptionId" = o."id"
+LEFT JOIN "Attributes" AS a ON pvv."AttributeId" = a."id"
+LEFT JOIN (
+    SELECT 
+        ci_sub."CartId",
+        ci_sub."VendorId",
+        SUM(ci_sub."subTotal") AS "vendorTotal"
+    FROM "CartItem" AS ci_sub
+    GROUP BY ci_sub."CartId", ci_sub."VendorId"
+) AS vt ON vt."CartId" = c."id" AND vt."VendorId" = v."id"
+WHERE c."status" != 'IN_CART'
+GROUP BY 
+    c."id", 
+    v."uuid", 
+    v."name", 
+    c."paymentMethod", 
+    c."status", 
+    vt."vendorTotal";
+
+
+
+-- DEAL PRODUCTS
+SELECT p."uuid",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."hasVariants",p."createdAt",
+                array_agg(
+                DISTINCT jsonb_build_object(
+                'id',pm."id",'url',pm."url",'width',pm."width",'height',pm."height",'size',pm."size",'mime',pm."mime",'name',pm."name") 
+                ) as "media",
+                array_agg(DISTINCT pvv."uuid") as "selectedOptions",
+                json_build_object(
+                'total',COUNT(DISTINCT pr."id"),
+                'average', COALESCE(ROUND(CAST(AVG(pr."rating") AS NUMERIC), 1), 0)
+                ) as "rating",
+                 json_build_object('title',c."title",'slug',c."slug") as "category",
+                 json_build_object('uuid',ps."uuid",'sku',ps."sku",'oldPrice',ps."oldPrice",'currentPrice',ps."currentPrice",'quantity',ps."quantity",'isDefault',ps."isDefault") as "sku",
+                 jsonb_build_object('uuid',f."uuid",'state',f."state") as "wishlist"
+                FROM public."Products" as p
+                   LEFT  JOIN "Media" as pm ON pm."mediaableId" = p."id" AND pm."mediaableType"='Product'
+                   LEFT  JOIN "Categories" as c ON p."CategoryId" = c."id"
+                   LEFT  JOIN "ProductSkus" as ps ON ps."ProductId" = p."id"
+                   LEFT  JOIN "Favourites" as f ON f."ProductId" = p."id" OR (f."ProductSkuId" IS NOT NULL AND f."ProductSkuId" = ps."id")
+                   LEFT  JOIN "SkuVariations" as sv ON sv."ProductId" = p."id"
+                   LEFT  JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
+                   LEFT  JOIN "Options" as o ON pvv."OptionId" = o."id"
+                   LEFT  JOIN "Attributes" as a ON pvv."AttributeId" = a."id"
+                   LEFT  JOIN "ProductReview" as pr ON pr."ProductId" = p."id"
+                WHERE (ps."isDefault" = TRUE OR ps."id" IS NULL) AND ((p."oldPrice" IS NOT NULL AND p."currentPrice" IS NOT NULL AND p."oldPrice" > p."currentPrice")
+    OR
+    (ps."oldPrice" IS NOT NULL AND ps."currentPrice" IS NOT NULL AND ps."oldPrice" > ps."currentPrice"))
+                GROUP BY p."uuid",p."hasVariants",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",c."title",c."slug",ps."uuid",ps."sku",ps."oldPrice",ps."currentPrice",ps."quantity",ps."uuid",ps."isDefault",f."uuid",f."state"
+
+
+
+-- BEST SELLERS
+SELECT p."uuid",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."hasVariants",p."createdAt",
+                array_agg(
+                DISTINCT jsonb_build_object(
+                'id',pm."id",'url',pm."url",'width',pm."width",'height',pm."height",'size',pm."size",'mime',pm."mime",'name',pm."name") 
+                ) as "media",
+                array_agg(DISTINCT pvv."uuid") as "selectedOptions",
+                json_build_object(
+                'total',COUNT(DISTINCT pr."id"),
+                'average', COALESCE(ROUND(CAST(AVG(pr."rating") AS NUMERIC), 1), 0)
+                ) as "rating",
+                 json_build_object('title',c."title",'slug',c."slug") as "category",
+                 json_build_object('uuid',ps."uuid",'sku',ps."sku",'oldPrice',ps."oldPrice",'currentPrice',ps."currentPrice",'quantity',ps."quantity",'isDefault',ps."isDefault") as "sku",
+                 jsonb_build_object('uuid',f."uuid",'state',f."state") as "wishlist"
+                FROM public."Products" as p
+                   LEFT  JOIN "Media" as pm ON pm."mediaableId" = p."id" AND pm."mediaableType"='Product'
+                   LEFT  JOIN "Categories" as c ON p."CategoryId" = c."id"
+                   LEFT  JOIN "ProductSkus" as ps ON ps."ProductId" = p."id"
+                   LEFT  JOIN "Favourites" as f ON f."ProductId" = p."id" OR (f."ProductSkuId" IS NOT NULL AND f."ProductSkuId" = ps."id")
+                   LEFT  JOIN "SkuVariations" as sv ON sv."ProductId" = p."id"
+                   LEFT  JOIN "ProductVariantValues" as pvv ON sv."ProductVariantValueId" = pvv."id"
+                   LEFT  JOIN "Options" as o ON pvv."OptionId" = o."id"
+                   LEFT  JOIN "Attributes" as a ON pvv."AttributeId" = a."id"
+                   LEFT  JOIN "ProductReview" as pr ON pr."ProductId" = p."id"
+                WHERE (ps."isDefault" = TRUE OR ps."id" IS NULL)
+                GROUP BY p."uuid",p."hasVariants",p."title",p."status",p."slug",p."overview",p."highlights",p."sku",p."currentPrice",p."oldPrice",p."quantity",p."features",p."sold",p."createdAt",c."title",c."slug",ps."uuid",ps."sku",ps."oldPrice",ps."currentPrice",ps."quantity",ps."uuid",ps."isDefault",f."uuid",f."state"
+                ORDER BY p."sold" DESC;
+
+
+
+
+
+ALTER TABLE "Cart" ADD CONSTRAINT "tracking_id_unique" UNIQUE ("trackingId")

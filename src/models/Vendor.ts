@@ -48,7 +48,7 @@ export const Vendor = sequelize.define<VendorModel>(
   },
   {
     defaultScope: {
-      attributes: { exclude: ["id","stripeConnectId"] },
+      attributes: { exclude: ["id"] },
     },
     scopes: {
       withId: {

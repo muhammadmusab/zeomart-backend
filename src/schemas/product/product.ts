@@ -127,3 +127,12 @@ export const listProductSchema = yup.object({
     category: yup.string(),
   }),
 });
+export const dealProductSchema = yup.object({
+  query: yup.object({
+    page: yup.number().required(),
+    limit: yup.number().required(),
+    // sortBy: yup.string(),
+    // sortAs: yup.string().oneOf(["DESC", "ASC"]),
+    // category: yup.string(),
+  }),
+});

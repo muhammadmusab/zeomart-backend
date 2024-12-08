@@ -8,6 +8,8 @@ import {
   GetBrand,
   ListAdmin,
   GetAdmin,
+  DealList,
+  BestSellerList,
 } from "../../controllers/product/product";
 import { validate } from "../../middlewares/validate-middleware";
 import {
@@ -17,6 +19,7 @@ import {
   deleteProductSchema,
   listProductSchema,
   getProductBrandSchema,
+  dealProductSchema,
 } from "../../schemas/product/product";
 import authMiddleware from "../../middlewares/auth-middleware";
 import { UserType } from "../../types/model-types";
@@ -61,6 +64,8 @@ router.post(
   Upload()
 );
 router.get("/list",filtersMiddleware, validate(listProductSchema), List);
+router.get("/deals",filtersMiddleware, validate(dealProductSchema), DealList);
+router.get("/best-seller",filtersMiddleware, validate(dealProductSchema), BestSellerList);
 router.get("/list/vendor",authMiddleware(UserType.VENDOR),filtersMiddleware, validate(listProductSchema), ListAdmin);
 
 export default router;

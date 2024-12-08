@@ -50,7 +50,9 @@ export const Category = sequelize.define<CategoryModel>(
   },
   {
     defaultScope: {
-      attributes: { exclude: ["id", "parentId"] },
+     attributes: {
+          exclude: [],
+        },
     },
     scopes: {
       withId: {
