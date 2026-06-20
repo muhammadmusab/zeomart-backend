@@ -35,12 +35,21 @@ export const up: Migration = async ({ context }: { context: Sequelize }) => {
       type: DataTypes.STRING,
       defaultValue: "IN_CART",
     },
+    paymentMethod: {
+      type: DataTypes.STRING,
+      defaultValue: "cash_on_delivery",
+    },
     UserId: {
       type: DataTypes.INTEGER,
       references: {
         model: "Users",
         key: "id",
       },
+    },
+    trackingId: {
+      type: DataTypes.STRING,
+      unique: true,
+      allowNull: false,
     },
     createdAt: {
       type: DataTypes.DATE,

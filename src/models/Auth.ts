@@ -161,8 +161,9 @@ Auth.beforeBulkCreate(generateHash);
 Auth.beforeBulkUpdate(generateHash);
 
 //====== Generate Mail Token
+
 Auth.prototype.generateMailToken = async function () {
-  const user = this;
+  const user:any = this;
 
   const payload = { email: user.email, type: user.type };
 
@@ -215,11 +216,12 @@ Auth.prototype.generateMailToken = async function () {
 };
 
 // ===== Generate Auth Token
+
 Auth.prototype.generateJWT = function (
   expiresIn = process.env.JWT_ACCESS_EXPIRY,
   tokenType = "access"
 ) {
-  const user = this;
+  const user:any = this;
   let privateKey = jwtAccessPrivateKey;
 
   if (tokenType === "refresh") privateKey = jwtRefreshPrivateKey;

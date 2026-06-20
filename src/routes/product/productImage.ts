@@ -9,7 +9,6 @@ import { Upload } from "../../utils/upload-function";
 router.post(
   "/upload",
   uploadMiddleware().array("media", 5),
-  // validate(createProductImageSchema),
   authMiddleware(UserType.VENDOR),
   Upload()
 );
