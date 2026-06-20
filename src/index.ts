@@ -79,7 +79,7 @@ import productSkuRoutes from "./routes/product/productSku";
 import productReviewRoutes from "./routes/product/productReview";
 import productFavouritesRoutes from "./routes/product/productFavourites";
 import productQuestionRoutes from "./routes/product/productQuestion";
-import productAnswerRoutes from "./routes/product/productAnswer";
+// import productAnswerRoutes from "./routes/product/productAnswer";
 // cart
 import cartRoutes from "./routes/cart/cart";
 import cartItemRoutes from "./routes/cart/cartItem";
@@ -110,7 +110,7 @@ app.use("/v1/api/product/sku", productSkuRoutes);
 app.use("/v1/api/product/variant", productVariantRoutes);
 app.use("/v1/api/product/wishlist", productFavouritesRoutes);
 app.use("/v1/api/product/question", productQuestionRoutes);
-app.use("/v1/api/product/answer", productAnswerRoutes);
+// app.use("/v1/api/product/answer", productAnswerRoutes);
 
 // cart
 app.use("/v1/api/cart", cartRoutes);
