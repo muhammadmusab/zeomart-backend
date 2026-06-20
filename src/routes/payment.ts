@@ -51,14 +51,12 @@ router.get(
   List
 );
 
-
-
 router.post(
   "/stripe/create-account",
   authMiddleware(UserType.VENDOR),
   StripeCreateAccount
 );
-router.post(
+router.get(
   "/stripe/link-account",
   validate(linkAccountSchema),
   authMiddleware(UserType.VENDOR),
@@ -76,7 +74,7 @@ router.post(
 );
 router.post(
   "/stripe/webhook",
-  express.text(),
+  // express.raw({type: 'application/json'}),
   // authMiddleware(UserType.USER),
   StripeWebHook
 );

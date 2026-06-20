@@ -24,7 +24,7 @@ export const listCategorySchema = yup.object({
   query: yup.object({
     // showSubcategories: yup.string().oneOf(["true", "false"]),
     // categoryUniqueId: yup.string().uuid(),
-    filter:yup.string(),
+    filter: yup.string(),
     levels: yup.number(),
     sortBy: yup.string(),
     sortAs: yup.string().oneOf(["DESC", "ASC"]),

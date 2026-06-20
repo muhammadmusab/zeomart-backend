@@ -198,7 +198,8 @@ export const StripeLinkAccount = async (
   next: NextFunction
 ) => {
   try {
-    const { accountId } = req.body;
+    // const { accountId } = req.body;
+      const accountId=req.user.Vendor?.stripeConnectId!
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
       refresh_url: `${process.env.DOMAIN}/vendor/payments/stripe-connnect/refresh/${accountId}`,
@@ -277,9 +278,8 @@ export const StripeWebHook = async (
   next: NextFunction
 ) => {
   //@ts-expect-error
-  const rawBody = await req.text(); // Read the raw body of the request
-
-  const sig = req.get("stripe-signature"); // Retrieve Stripe signature header
+  const rawBody = await req.rawBody; // Read the raw body of the request
+  const sig = req.headers["stripe-signature"]; // Retrieve Stripe signature header
   if (!sig) {
     return res.status(400).send("Stripe signature missing");
   }
@@ -307,7 +307,7 @@ export const StripeWebHook = async (
         const sessionCompleted = event.data.object;
         const orderId = sessionCompleted?.metadata?.orderId;
         if (orderId) {
-          const _cart = await Cart.findOne({
+          const _cart = await Cart.scope("withId").findOne({
             where: {
               uuid: orderId as string,
             },
@@ -348,17 +348,27 @@ export const StripeWebHook = async (
                     ],
                   });
                   _cartItems.map(async (item: any) => {
+                    const data = item.dataValues;
                     let payload: {
                       subTotal: number;
-                      vendor: { uuid: string; stripeConnectId: string };
-                    } = item;
+                      vendor: {
+                        dataValues: { uuid: string; stripeConnectId: string };
+                      };
+                    } = data;
+                    console.log("payload---", payload);
+                    console.log(
+                      "payload- datavalues--",
+                      payload.vendor.dataValues
+                    );
                     // loop through order vendors and create charge for each vendor
-                    const transfer = await stripe.transfers.create({
-                      amount: payload.subTotal, // set to whatever the vendor should receive
-                      currency: "usd",
-                      source_transaction: chargeId,
-                      destination: payload.vendor.stripeConnectId, // get from vendor,
-                    });
+                    if (payload.vendor.dataValues.stripeConnectId) {
+                      await stripe.transfers.create({
+                        amount: Math.round(payload.subTotal * 100), // set to whatever the vendor should receive
+                        currency: "usd",
+                        source_transaction: chargeId,
+                        destination: payload.vendor.dataValues.stripeConnectId, // get from vendor,
+                      });
+                    }
                   });
                 }
               }
@@ -372,7 +382,7 @@ export const StripeWebHook = async (
     }
 
     // Respond to Stripe to acknowledge receipt of the event
-    return res.send({ message: "Success", data: { received: true } });
+    return res.json({ received: true });
   } catch (error) {
     next(error);
   }
@@ -418,9 +428,14 @@ export const checkoutStripe = async (
   res: Response,
   payload?: Record<string, any>
 ) => {
+  const _cart = await Cart.scope("withId").findOne({
+    where: {
+      uuid: payload?.cart.uuid,
+    },
+  });
   const _cartItems: any = await CartItem.findAll({
     where: {
-      CartId: payload?.cart.id,
+      CartId: _cart?.id,
     },
     attributes: ["ProductId", "ProductSkuId", "quantity", "subTotal"],
     include: [
@@ -447,7 +462,7 @@ export const checkoutStripe = async (
         product_data: {
           name: item.product.dataValues.title,
         },
-        unit_amount: parseInt(item.dataValues.subTotal)*100,
+        unit_amount: parseInt(item.dataValues.subTotal) * 100,
       },
       quantity: parseInt(item.dataValues.quantity),
     };
@@ -459,7 +474,8 @@ export const checkoutStripe = async (
       transfer_group: payload?.cart.uuid,
     },
     mode: "payment",
-    success_url: `${process.env.DOMAIN}/order/success?session_id={CHECKOUT_SESSION_ID}`,
+    success_url: `${process.env.DOMAIN}/order/${payload?.cart.uuid}/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${process.env.DOMAIN}/checkout`,
     metadata: {
       orderId: payload?.cart.uuid,
     },

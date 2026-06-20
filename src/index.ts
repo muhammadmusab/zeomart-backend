@@ -38,8 +38,18 @@ if (process.env.NODE_ENV === "production") {
 }
 
 app.use(logger("dev"));
-app.use(express.json());
+// app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(
+  express.json({
+    verify(req: any, res, buf, encoding) {
+      console.log(req.path,'---------------------------------------------webhook-path----------------------------------------------------------')
+      if (req.path.includes("/stripe/webhook")) {
+        req.rawBody = buf.toString(); // sets raw string in req.rawBody variable
+      }
+    },
+  })
+);
 // {
 //   origin: 'http://localhost:3000',
 //   methods:['GET','POST','PATCH','DELETE','OPTIONS'],
@@ -50,7 +60,7 @@ app.use(cors());
 // ASSOCIATIONS
 import "./utils/associations";
 app.use("/media", express.static(path.join(__dirname, "media")));
-app.use(express.text());
+// app.use(express.text());
 // Routes
 import authRoutes from "./routes/auth";
 import userRoutes from "./routes/user";
@@ -75,11 +85,9 @@ import cartRoutes from "./routes/cart/cart";
 import cartItemRoutes from "./routes/cart/cartItem";
 import paymentRoutes from "./routes/payment";
 
-
 //attribute
 app.use("/v1/api/attribute", attributeRoutes);
 app.use("/v1/api/option", optionRoutes);
-
 
 import couponRoutes from "./routes/coupon";
 import shippingRoutes from "./routes/shipping";
@@ -94,10 +102,8 @@ app.use("/v1/api/filter", filterRoutes);
 
 app.use("/v1/api/brand", brandRoutes);
 
-
 // product
 app.use("/v1/api/product", productRoutes);
-
 
 app.use("/v1/api/product/review", productReviewRoutes);
 app.use("/v1/api/product/sku", productSkuRoutes);
@@ -107,8 +113,8 @@ app.use("/v1/api/product/question", productQuestionRoutes);
 app.use("/v1/api/product/answer", productAnswerRoutes);
 
 // cart
-app.use('/v1/api/cart', cartRoutes);
-app.use('/v1/api/cart-item', cartItemRoutes);
+app.use("/v1/api/cart", cartRoutes);
+app.use("/v1/api/cart-item", cartItemRoutes);
 
 //coupon
 // app.use('/v1/api/coupon',couponRoutes);

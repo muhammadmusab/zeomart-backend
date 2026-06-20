@@ -7,7 +7,6 @@ import { getValidUpdates } from "../../utils/validate-updates";
 import { getPaginated } from "../../utils/paginate";
 
 import { ProductSkus } from "../../models/ProductSku";
-import { ProductImage } from "../../models/ProductImage";
 import { SkuVariations } from "../../models/SkuVariation";
 import { ProductVariantValues } from "../../models/ProductVariantValue";
 import { Op, QueryTypes, where } from "sequelize";

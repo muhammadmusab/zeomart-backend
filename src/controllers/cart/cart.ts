@@ -621,7 +621,8 @@ export const PlaceOrder = async (
   next: NextFunction
 ) => {
   try {
-    const { paymentMethod } = req.body;
+    const { paymentMethod,cart } = req.body;
+    console.log('------cart',req.body.cart)
     const user = req.user.User?.uuid;
     const _user = await User.scope("withId").findOne({
       where: {
@@ -630,8 +631,8 @@ export const PlaceOrder = async (
     });
     const _cart = await Cart.scope("withId").findOne({
       where: {
-        UserId: _user?.id,
-        status: "IN_CART",
+        uuid:req.body.cart,
+        UserId:_user?.id
       },
     });
 
@@ -702,6 +703,7 @@ export const PlaceOrder = async (
       data,
     });
   } catch (error: any) {
+    console.log(error)
     next(error);
   }
 };

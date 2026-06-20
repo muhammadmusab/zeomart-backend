@@ -242,7 +242,7 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
     // level of deep subcategories
     // const levels = req.query.levels ? req.query.levels : 1;
     //@ts-expect-error
-    const { levels = 1, showSubcategories } = req.filter;
+    const { levels = 1, showSubcategories,category } = req.filter;
     let showChildren =
       showSubcategories?.toString().toLocaleLowerCase().trim() === "true"
         ? true
@@ -254,9 +254,9 @@ export const List = async (req: Request, res: Response, next: NextFunction) => {
         [Op.iLike]: `%${title}%`,
       };
     }
-    if (req.query.categoryUniqueId) {
+    if (category) {
       //@ts-ignore
-      where["uuid"] = req.query.categoryUniqueId;
+      where["uuid"] = category;
     }
 
     const { count: total, rows: categories } = await Category.findAndCountAll({
